@@ -3,6 +3,10 @@
 Egemen'in kişisel finans sistemi. Notion + Google Drive + statik HTML panonun
 yerine geçen Next.js uygulaması; tek doğru kaynak **Supabase** (`finans` şeması).
 
+> **Not — bu repo iki uygulama barındırıyor.** Kökteki `makro-takip_*.html`
+> dosyaları ayrı bir işe, beslenme/makro takibine ait; finansla ilgileri yok,
+> dokunulmadı. Finans uygulamasının kendi private reposuna taşınması planlanıyor.
+
 Her sabah 08:00'de (Europe/Istanbul) bulutta çalışan zamanlanmış bir Claude
 oturumu Gmail'den banka bildirimlerini okuyup aynı veritabanına yazıyor.
 Uygulama hem onu gösterir hem üzerine yazar.
