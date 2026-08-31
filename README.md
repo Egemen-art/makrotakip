@@ -93,3 +93,13 @@ npm test
 
 Brief'teki iki kritik iş kuralını doğrular: mükerrer kilidi ve kural deseni
 üretimi. Ayrıntı: `testler/README.md`.
+
+## Bölge / gecikme
+
+Sunucu fonksiyonları `vercel.json` ile **Tokyo (`hnd1`)** bölgesine sabitlendi —
+Supabase projesi `ap-northeast-1`'de (Tokyo) olduğu için veritabanı gidiş-dönüşü
+böylece milisaniyelere iner. Varsayılan bölge `iad1` (ABD) idi ve her sorgu
+Atlantik + Pasifik geçiyordu.
+
+Supabase ileride Frankfurt'a (`eu-central-1`) taşınırsa buradaki bölgeyi de
+`fra1` yap — Türkiye'den en düşük gecikme o ikilide.
