@@ -1,0 +1,100 @@
+@import "tailwindcss";
+
+/* Palet: dogrulanmis varsayilan veri-gorsellestirme paleti.
+   Renkler role gore tanimlanir; acik/koyu tek yerde takas edilir. */
+:root {
+  color-scheme: light;
+  --plane:        #f9f9f7;
+  --surface:      #fcfcfb;
+  --ink:          #0b0b0b;
+  --ink-2:        #52514e;
+  --ink-muted:    #898781;
+  --grid:         #e1e0d9;
+  --axis:         #c3c2b7;
+  --hair:         rgba(11, 11, 11, 0.10);
+
+  --seri-1: #2a78d6;  /* mavi   */
+  --seri-2: #eb6834;  /* turuncu*/
+  --seri-3: #1baf7a;  /* su yesili */
+  --seri-4: #eda100;  /* sari   */
+  --seri-5: #e87ba4;  /* macenta*/
+  --seri-6: #008300;  /* yesil  */
+  --seri-7: #4a3aa7;  /* mor    */
+  --seri-8: #e34948;  /* kirmizi*/
+
+  --iyi:      #0ca30c;
+  --uyari:    #fab219;
+  --ciddi:    #ec835a;
+  --kritik:   #d03b3b;
+  --artis-iyi:#006300;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema="acik"]) {
+    color-scheme: dark;
+    --plane:     #0d0d0d;
+    --surface:   #1a1a19;
+    --ink:       #ffffff;
+    --ink-2:     #c3c2b7;
+    --ink-muted: #898781;
+    --grid:      #2c2c2a;
+    --axis:      #383835;
+    --hair:      rgba(255, 255, 255, 0.10);
+
+    --seri-1: #3987e5; --seri-2: #d95926; --seri-3: #199e70; --seri-4: #c98500;
+    --seri-5: #d55181; --seri-6: #008300; --seri-7: #9085e9; --seri-8: #e66767;
+    --artis-iyi: #0ca30c;
+  }
+}
+
+:root[data-tema="koyu"] {
+  color-scheme: dark;
+  --plane:     #0d0d0d;
+  --surface:   #1a1a19;
+  --ink:       #ffffff;
+  --ink-2:     #c3c2b7;
+  --ink-muted: #898781;
+  --grid:      #2c2c2a;
+  --axis:      #383835;
+  --hair:      rgba(255, 255, 255, 0.10);
+
+  --seri-1: #3987e5; --seri-2: #d95926; --seri-3: #199e70; --seri-4: #c98500;
+  --seri-5: #d55181; --seri-6: #008300; --seri-7: #9085e9; --seri-8: #e66767;
+  --artis-iyi: #0ca30c;
+}
+
+@theme inline {
+  --color-plane: var(--plane);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-muted: var(--ink-muted);
+  --color-grid: var(--grid);
+  --color-axis: var(--axis);
+  --color-iyi: var(--iyi);
+  --color-uyari: var(--uyari);
+  --color-ciddi: var(--ciddi);
+  --color-kritik: var(--kritik);
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+body {
+  background: var(--plane);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/* Tablo sutunlari dikey hizalansin */
+.rakam { font-variant-numeric: tabular-nums; }
+
+.kart {
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+}
+
+/* Odak halkasi — klavyeyle gezinme gorunur kalsin */
+:where(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid var(--seri-1);
+  outline-offset: 2px;
+}
