@@ -43,7 +43,15 @@ export default function Gezinti() {
             </Link>
           )
         })}
-        <form action="/giris/cikis" method="post" className="ml-auto shrink-0">
+        <Link
+          href="/hesap"
+          aria-current={yol.startsWith('/hesap') ? 'page' : undefined}
+          className="ml-auto shrink-0 rounded-lg px-3 py-1.5 text-[13px]"
+          style={{ color: yol.startsWith('/hesap') ? 'var(--ink)' : 'var(--ink-muted)' }}
+        >
+          Hesap
+        </Link>
+        <form action="/giris/cikis" method="post" className="shrink-0">
           <button
             type="submit"
             className="rounded-lg px-3 py-1.5 text-[13px]"
