@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from '@/lib/ortam'
 
 /**
  * Her istekte Supabase oturumunu tazeler ve girisi zorunlu kilar.
@@ -9,8 +10,8 @@ export async function proxy(istek: NextRequest) {
   let yanit = NextResponse.next({ request: istek })
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY,
     {
       cookies: {
         getAll: () => istek.cookies.getAll(),

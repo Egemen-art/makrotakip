@@ -5,6 +5,7 @@ import {
   BAGLAMLAR, DURUMLAR, KAYNAKLAR, TIPLER, YUK_SAHIPLERI,
 } from '@/lib/tipler'
 import { mukerrerAnahtar } from '@/lib/mukerrer'
+import { SUPABASE_URL } from '@/lib/ortam'
 
 export const dynamic = 'force-dynamic'
 
@@ -148,7 +149,7 @@ export async function POST(istek: Request) {
   }
 
   const sb = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    SUPABASE_URL,
     servisAnahtari,
     { db: { schema: 'finans' }, auth: { persistSession: false, autoRefreshToken: false } },
   )
