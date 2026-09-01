@@ -43,9 +43,12 @@ export default async function Pano() {
     ay: o.ay, gider: say(o.gider), gelir: say(o.gelir), aktarim: say(o.aktarim),
   }))
 
-  // Sapma: son 7 ayin bandi (v_kategori_bant). 20 aylik ortalama kullanilmaz —
-  // Market kategorisi siniflandirma degisikligi yuzunden kirildi, uzun ortalama
-  // surekli yanlis alarm uretir.
+  // Sapma: finans.kategori_bant(bu ay). Olculen ay bandin DISINDA kalir; bant
+  // ondan onceki 6 tam aydan kurulur. Esik `esik` sutunudur (= max(ust_sinir,
+  // ortalama+2σ)) — `ust_sinir` degil, o sadece bandin ust ucu.
+  // 20 aylik ortalama kullanilmaz: Market kategorisi 2025/2026 arasinda
+  // siniflandirma degisikligiyle kirildi, uzun ortalama yanlis alarm uretir.
+  // Kaynak: finans.kararlar > "Sapma olcusu".
   const buAyKategori = new Map<string, number>()
   for (const k of d.seriler.ay) {
     if (k.donem === buAy && k.yon === 'Gider') {
@@ -54,8 +57,8 @@ export default async function Pano() {
   }
   const sapmalar = d.bant
     .map((b) => ({ ...b, simdi: buAyKategori.get(b.kategori) ?? 0 }))
-    .filter((b) => b.simdi > Number(b.ust_sinir))
-    .sort((a, b) => (b.simdi - Number(b.ust_sinir)) - (a.simdi - Number(a.ust_sinir)))
+    .filter((b) => b.simdi > Number(b.esik))
+    .sort((a, b) => (b.simdi - Number(b.esik)) - (a.simdi - Number(a.esik)))
     .slice(0, 5)
 
   return (
@@ -148,14 +151,15 @@ export default async function Pano() {
                     {tl(b.simdi)}
                   </span>
                   <span className="rakam text-[11px]" style={{ color: 'var(--ink-muted)' }}>
-                    bant {tl(b.alt_sinir)}–{tl(b.ust_sinir)}
+                    bant {tl(b.alt_sinir)}–{tl(b.ust_sinir)} · eşik {tl(b.esik)}
                   </span>
                 </span>
               </li>
             ))}
           </ul>
           <p className="mt-2 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
-            Ay devam ediyor; bandın üstü kesin aşım değil, bakılacak yer demek.
+            Ay devam ediyor; eşiği geçmek kesin aşım değil, bakılacak yer demek.
+            Bant, ölçülen aydan önceki 6 tam aydan kuruluyor.
           </p>
         </Bolum>
       )}

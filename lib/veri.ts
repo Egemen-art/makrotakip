@@ -4,9 +4,9 @@ import type {
 } from '@/lib/tipler'
 
 /**
- * Proje Tokyo'da (ap-northeast-1); Turkiye'den gidis-donus ~250 ms.
- * Bu yuzden sayfa verisi TEK bir Promise.all icinde, paralel cekilir —
- * ardisik sorgu zinciri kurulmaz.
+ * Proje Frankfurt'ta (eu-central-1) ve Vercel fonksiyonlari da `fra1`'de.
+ * Sayfa verisi yine TEK bir Promise.all icinde paralel cekilir — ardisik
+ * sorgu zinciri kurulmaz, her ek tur gecikmeye dogrudan biniyor.
  */
 export async function panoVerisi() {
   const sb = await supabaseSunucu()

@@ -141,4 +141,11 @@ export type KategoriBant = {
   alt_sinir: string
   ortalama: string
   ust_sinir: string
+  std_sapma: string
+  /**
+   * Dikkat cekici sapma esigi: max(ust_sinir, ortalama + 2σ).
+   * `finans.kararlar` > "Sapma olcusu" karari bunu soyluyor —
+   * `ust_sinir` esik DEGILDIR, bandin ust ucudur.
+   */
+  esik: string
 }
