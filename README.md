@@ -96,10 +96,11 @@ Brief'teki iki kritik iş kuralını doğrular: mükerrer kilidi ve kural deseni
 
 ## Bölge / gecikme
 
-Sunucu fonksiyonları `vercel.json` ile **Tokyo (`hnd1`)** bölgesine sabitlendi —
-Supabase projesi `ap-northeast-1`'de (Tokyo) olduğu için veritabanı gidiş-dönüşü
-böylece milisaniyelere iner. Varsayılan bölge `iad1` (ABD) idi ve her sorgu
-Atlantik + Pasifik geçiyordu.
+Sunucu fonksiyonları `vercel.json` ile **Frankfurt (`fra1`)** bölgesine
+sabitlendi; Supabase projesi de `eu-central-1`'de (Frankfurt). İkisi aynı
+kıtada olduğu için veritabanı gidiş-dönüşü milisaniyelere iner.
 
-Supabase ileride Frankfurt'a (`eu-central-1`) taşınırsa buradaki bölgeyi de
-`fra1` yap — Türkiye'den en düşük gecikme o ikilide.
+Önce Vercel `iad1`'de (ABD), Supabase Tokyo'daydı — her sayfa iki Pasifik
+geçişi demekti. Sonra ikisi de Tokyo'ya alındı; en sonunda tüm Supabase
+projesi Frankfurt'a taşındı (`ibbciqycoddyzbyylkad` → `zapkarkdzpjhkdyurfpl`),
+çünkü Türkiye'den en düşük gecikme o ikilide.

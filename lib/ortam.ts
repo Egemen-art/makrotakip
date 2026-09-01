@@ -11,8 +11,8 @@
  * yalnizca ortam degiskeninden okunur ve sunucu tarafinda kalir.
  */
 export const SUPABASE_URL =
-  process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://ibbciqycoddyzbyylkad.supabase.co'
+  process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://zapkarkdzpjhkdyurfpl.supabase.co'
 
 export const SUPABASE_ANON_KEY =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
-  'sb_publishable_6KrJmfg3exBLaVwKlZ16Hw_KmRxaZwu'
+  'sb_publishable_LFKhr2DNDKNei7MzIxVvcA_wZX4lzGO'
