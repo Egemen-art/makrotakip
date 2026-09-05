@@ -8,7 +8,12 @@ import type {
  * Sayfa verisi yine TEK bir Promise.all icinde paralel cekilir — ardisik
  * sorgu zinciri kurulmaz, her ek tur gecikmeye dogrudan biniyor.
  */
-export async function panoVerisi() {
+/**
+ * @param seciliAy Panoda secili ay, 'YYYY-MM'. Ozet ve seriler TUM aylari tasir (ay
+ *   secimi istemcide/sunucuda ayni veriden yapilir); yalniz sapma bandi bu aya
+ *   gore kurulur — olculen ay bandin DISINDA kalir (kararlar > "Sapma olcusu").
+ */
+export async function panoVerisi(seciliAy: string) {
   const sb = await supabaseSunucu()
 
   const [
@@ -23,7 +28,7 @@ export async function panoVerisi() {
     sb.from('taksit_plani').select('*').eq('durum', 'Aktif').order('aylik_tutar', { ascending: false }),
     sb.from('islemler').select('*').order('tarih', { ascending: false }).order('id', { ascending: false }).limit(15),
     sb.from('islemler').select('id', { count: 'exact', head: true }).eq('durum', 'Soruldu'),
-    sb.from('v_kategori_bant').select('*'),
+    sb.rpc('kategori_bant', { ref_ay: seciliAy }),
   ])
 
   return {

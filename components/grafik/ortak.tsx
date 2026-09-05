@@ -22,6 +22,9 @@ export const SERI_RENKLERI = [
   'var(--seri-5)', 'var(--seri-6)', 'var(--seri-7)', 'var(--seri-8)',
 ]
 
+/** "Diger" gibi kimligi olmayan dilimler icin notr renk — seri paletinden DEGIL. */
+export const NOTR_RENK = 'var(--axis)'
+
 type IpucuGirdi = { name?: string; value?: number; color?: string; dataKey?: string }
 
 /** Ortak hover ipucu. Metin daima metin renginde; kimligi yanindaki renk noktasi tasir. */
@@ -42,9 +45,11 @@ export function Ipucu({
       className="kart px-3 py-2 text-[12px] shadow-lg"
       style={{ background: 'var(--surface)', color: 'var(--ink)' }}
     >
-      <div className="mb-1 font-medium">
-        {donemMi && label ? donemEtiket(String(label)) : label}
-      </div>
+      {label && (
+        <div className="mb-1 font-medium">
+          {donemMi ? donemEtiket(String(label)) : label}
+        </div>
+      )}
       {gorunen.map((p, i) => (
         <div key={i} className="flex items-center gap-2 whitespace-nowrap">
           <span
@@ -63,4 +68,42 @@ export function Ipucu({
 export const EKSEN_STILI = {
   fontSize: 11,
   fill: 'var(--ink-muted)',
+}
+
+/** Tek secimli, birbirine bitisik dugme grubu (Donem: Haftalik | Aylik | Yillik). */
+export function SecimGrubu<T extends string>({
+  secenekler, deger, degistir, etiket,
+}: {
+  secenekler: { deger: T; ad: string }[]
+  deger: T
+  degistir: (d: T) => void
+  etiket: string
+}) {
+  return (
+    <div
+      className="flex items-center gap-0.5 rounded-lg p-0.5"
+      role="group"
+      aria-label={etiket}
+      style={{ border: '1px solid var(--hair)' }}
+    >
+      {secenekler.map((s) => {
+        const acik = s.deger === deger
+        return (
+          <button
+            key={s.deger}
+            type="button"
+            onClick={() => degistir(s.deger)}
+            aria-pressed={acik}
+            className="rounded-md px-2.5 py-1 text-[12px] font-medium"
+            style={{
+              background: acik ? 'var(--seri-1)' : 'transparent',
+              color: acik ? '#fff' : 'var(--ink-2)',
+            }}
+          >
+            {s.ad}
+          </button>
+        )
+      })}
+    </div>
+  )
 }

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { panoVerisi } from '@/lib/veri'
 import { Istatistik, ParaSatiri } from '@/components/Istatistik'
 import Bolum from '@/components/Bolum'
+import AySecici from '@/components/AySecici'
 import TrendGrafigi from '@/components/grafik/TrendGrafigi'
 import KategoriGrafigi from '@/components/grafik/KategoriGrafigi'
 import { bugun, donemEtiket, tarihKisa, tl, tlKurus } from '@/lib/bicim'
@@ -9,24 +10,38 @@ import { bugun, donemEtiket, tarihKisa, tl, tlKurus } from '@/lib/bicim'
 export const dynamic = 'force-dynamic'
 
 const say = (n: string | null | undefined) => Number(n ?? 0)
+const AY_DESENI = /^\d{4}-(0[1-9]|1[0-2])$/
 
-export default async function Pano() {
-  const d = await panoVerisi()
-
+export default async function Pano({
+  searchParams,
+}: {
+  searchParams: Promise<{ ay?: string }>
+}) {
+  const { ay: istenen } = await searchParams
   const buAy = bugun().slice(0, 7)
+  // Bicimi bozuk ya da gelecekteki bir ay istenirse bu aya dusulur.
+  const seciliAy = istenen && AY_DESENI.test(istenen) && istenen <= buAy ? istenen : buAy
+
+  const d = await panoVerisi(seciliAy)
+
   const siraliOzet = [...d.ozet].sort((a, b) => a.ay.localeCompare(b.ay))
-  const buAyOzet = siraliOzet.find((o) => o.ay === buAy)
-  const gecenAyOzet = siraliOzet.filter((o) => o.ay < buAy).at(-1)
+  const seciliOzet = siraliOzet.find((o) => o.ay === seciliAy)
+  const oncekiOzet = siraliOzet.filter((o) => o.ay < seciliAy).at(-1)
+  const buAyMi = seciliAy === buAy
+
+  // Secici: verisi olan aylar + bu ay (henuz kaydi olmasa da), yeniden eskiye.
+  const aylar = [...new Set([buAy, ...siraliOzet.map((o) => o.ay)])].sort().reverse()
 
   const oran = (simdi: number, once: number) => (once > 0 ? (simdi - once) / once : NaN)
-  const giderDelta = gecenAyOzet
-    ? { oran: oran(say(buAyOzet?.gider), say(gecenAyOzet.gider)), artisIyiMi: false }
+  const giderDelta = oncekiOzet
+    ? { oran: oran(say(seciliOzet?.gider), say(oncekiOzet.gider)), artisIyiMi: false }
     : null
-  const gelirDelta = gecenAyOzet
-    ? { oran: oran(say(buAyOzet?.gelir), say(gecenAyOzet.gelir)), artisIyiMi: true }
+  const gelirDelta = oncekiOzet
+    ? { oran: oran(say(seciliOzet?.gelir), say(oncekiOzet.gelir)), artisIyiMi: true }
     : null
 
-  const net = say(buAyOzet?.gelir) - say(buAyOzet?.gider)
+  const net = say(seciliOzet?.gelir) - say(seciliOzet?.gider)
+  const ayDurumu = buAyMi ? 'ay devam ediyor' : `${donemEtiket(oncekiOzet?.ay ?? '')} ile kıyas`
 
   const kartBorcu = d.kartlar.reduce((t, k) => t + say(k.ekstre_borcu), 0)
   const kartKullanim = d.kartlar.reduce((t, k) => t + say(k.kullanim_tl), 0)
@@ -39,24 +54,25 @@ export default async function Pano() {
     .filter((p) => p.yuk_sahibi === 'Kendi gideri')
     .reduce((t, p) => t + say(p.aylik_tutar), 0)
 
-  const trend = siraliOzet.slice(-12).map((o) => ({
+  // Trend TUM aylari alir; 6 / 12 / tumu secimi grafigin icinde, istemcide.
+  const trend = siraliOzet.map((o) => ({
     ay: o.ay, gider: say(o.gider), gelir: say(o.gelir), aktarim: say(o.aktarim),
   }))
 
-  // Sapma: finans.kategori_bant(bu ay). Olculen ay bandin DISINDA kalir; bant
+  // Sapma: finans.kategori_bant(secili ay). Olculen ay bandin DISINDA kalir; bant
   // ondan onceki 6 tam aydan kurulur. Esik `esik` sutunudur (= max(ust_sinir,
   // ortalama+2σ)) — `ust_sinir` degil, o sadece bandin ust ucu.
   // 20 aylik ortalama kullanilmaz: Market kategorisi 2025/2026 arasinda
   // siniflandirma degisikligiyle kirildi, uzun ortalama yanlis alarm uretir.
   // Kaynak: finans.kararlar > "Sapma olcusu".
-  const buAyKategori = new Map<string, number>()
+  const seciliAyKategori = new Map<string, number>()
   for (const k of d.seriler.ay) {
-    if (k.donem === buAy && k.yon === 'Gider') {
-      buAyKategori.set(k.kategori, Number(k.toplam))
+    if (k.donem === seciliAy && k.yon === 'Gider') {
+      seciliAyKategori.set(k.kategori, Number(k.toplam))
     }
   }
   const sapmalar = d.bant
-    .map((b) => ({ ...b, simdi: buAyKategori.get(b.kategori) ?? 0 }))
+    .map((b) => ({ ...b, simdi: seciliAyKategori.get(b.kategori) ?? 0 }))
     .filter((b) => b.simdi > Number(b.esik))
     .sort((a, b) => (b.simdi - Number(b.esik)) - (a.simdi - Number(a.esik)))
     .slice(0, 5)
@@ -92,29 +108,32 @@ export default async function Pano() {
         </Link>
       )}
 
-      <h1 className="text-[17px] font-semibold">
-        {donemEtiket(buAy)} <span style={{ color: 'var(--ink-muted)' }}>· özet</span>
-      </h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-[17px] font-semibold">
+          {donemEtiket(seciliAy)} <span style={{ color: 'var(--ink-muted)' }}>· özet</span>
+        </h1>
+        <AySecici aylar={aylar} secili={seciliAy} buAy={buAy} />
+      </div>
 
       <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Istatistik
-          etiket="Bu ay gider" deger={tl(say(buAyOzet?.gider))}
-          delta={giderDelta} altMetin="ay devam ediyor"
+          etiket="Gider" deger={tl(say(seciliOzet?.gider))}
+          delta={giderDelta} altMetin={ayDurumu}
         />
         <Istatistik
-          etiket="Bu ay gelir" deger={tl(say(buAyOzet?.gelir))}
-          delta={gelirDelta} altMetin="ay devam ediyor"
+          etiket="Gelir" deger={tl(say(seciliOzet?.gelir))}
+          delta={gelirDelta} altMetin={ayDurumu}
         />
         <Istatistik
-          etiket="Bu ay aktarım" deger={tl(say(buAyOzet?.aktarim))}
+          etiket="Aktarım" deger={tl(say(seciliOzet?.aktarim))}
           altMetin="gider değil · yer değiştirme"
         />
         <Istatistik
           etiket="Net (gelir − gider)" deger={tl(net)}
           vurgu={net >= 0 ? 'iyi' : 'kritik'}
           altMetin={
-            say(buAyOzet?.hesaplasma) > 0
-              ? `ayrıca ${tl(say(buAyOzet?.hesaplasma))} hesaplaşma`
+            say(seciliOzet?.hesaplasma) > 0
+              ? `ayrıca ${tl(say(seciliOzet?.hesaplasma))} hesaplaşma`
               : undefined
           }
         />
@@ -122,22 +141,22 @@ export default async function Pano() {
 
       <Bolum
         baslik="Aylık gider, gelir ve aktarım"
-        aciklama="Arşiv ve canlı defter birlikte · son 12 ay. Aktarım toplamlara girmez ama görünür kalır."
+        aciklama="Arşiv ve canlı defter birlikte. Aktarım toplamlara girmez ama görünür kalır."
       >
         <TrendGrafigi veri={trend} />
       </Bolum>
 
       <Bolum
         baslik="Kategori kıyaslama"
-        aciklama="Dönem ve kategori seç; renkler kategoriye sabittir"
+        aciklama="Çubuk: dönemler boyunca kıyas · Pasta: seçili ayda biten pencerede pay. Renkler kategoriye sabittir."
       >
-        <KategoriGrafigi seriler={d.seriler} />
+        <KategoriGrafigi seriler={d.seriler} seciliAy={seciliAy} />
       </Bolum>
 
       {sapmalar.length > 0 && (
         <Bolum
           baslik="Bandın dışında"
-          aciklama="Son 7 ayın bandına göre bu ay yüksek kalan kategoriler"
+          aciklama={`${donemEtiket(seciliAy)} öncesindeki 6 ayın bandına göre yüksek kalan kategoriler`}
         >
           <ul>
             {sapmalar.map((b) => (
@@ -158,8 +177,10 @@ export default async function Pano() {
             ))}
           </ul>
           <p className="mt-2 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
-            Ay devam ediyor; eşiği geçmek kesin aşım değil, bakılacak yer demek.
-            Bant, ölçülen aydan önceki 6 tam aydan kuruluyor.
+            {buAyMi
+              ? 'Ay devam ediyor; eşiği geçmek kesin aşım değil, bakılacak yer demek. '
+              : ''}
+            Bant, ölçülen aydan önceki 6 tam aydan kuruluyor; ölçülen ay banda girmez.
           </p>
         </Bolum>
       )}
