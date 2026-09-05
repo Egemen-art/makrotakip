@@ -150,7 +150,7 @@ export default async function Pano({
         baslik="Kategori kıyaslama"
         aciklama="Çubuk: dönemler boyunca kıyas · Pasta: seçili ayda biten pencerede pay. Renkler kategoriye sabittir."
       >
-        <KategoriGrafigi seriler={d.seriler} seciliAy={seciliAy} />
+        <KategoriGrafigi seriler={d.seriler} seciliAy={seciliAy} altKategoriler={d.altKategoriler} />
       </Bolum>
 
       {sapmalar.length > 0 && (

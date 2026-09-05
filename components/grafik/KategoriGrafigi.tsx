@@ -5,7 +5,7 @@ import {
   Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer,
   Tooltip, XAxis, YAxis,
 } from 'recharts'
-import type { KategoriSerisi, Yon } from '@/lib/tipler'
+import type { AylikKategori, KategoriSerisi, Yon } from '@/lib/tipler'
 import { donemEtiket, tl, tlKurus, trSirala, yuzde } from '@/lib/bicim'
 import {
   EKSEN_STILI, Ipucu, NOTR_RENK, SERI_RENKLERI, SecimGrubu, eksenTL, ustSinir,
@@ -48,11 +48,13 @@ type YuvaKaydi = {
 }
 
 export default function KategoriGrafigi({
-  seriler, seciliAy,
+  seriler, seciliAy, altKategoriler,
 }: {
   seriler: Seriler
   /** Panoda secili ay ('YYYY-MM'). Pasta gorunumunun "Aylik / 6 aylik / 1 yillik" penceresi buraya baglidir. */
   seciliAy: string
+  /** v_aylik_kategori — dilime tiklayinca alt kategori kirilimi buradan. */
+  altKategoriler: AylikKategori[]
 }) {
   const [gorunum, setGorunum] = useState<Gorunum>('cubuk')
   const [yon, setYon] = useState<Yon>('Gider')
@@ -85,7 +87,7 @@ export default function KategoriGrafigi({
       {/* key={yon}: yon degisince secim sifirdan kurulur. */}
       {gorunum === 'cubuk'
         ? <CubukGorunumu key={yon} seriler={seriler} yon={yon} kayit={kayit} />
-        : <PastaGorunumu key={yon} kayitlar={seriler.ay} yon={yon} seciliAy={seciliAy} kayit={kayit} />}
+        : <PastaGorunumu key={yon} kayitlar={seriler.ay} yon={yon} seciliAy={seciliAy} kayit={kayit} altKategoriler={altKategoriler} />}
     </div>
   )
 }
@@ -374,24 +376,51 @@ function dilimleriHesapla(kayitlar: KategoriSerisi[], yon: Yon, seciliAy: string
     .map(([ad, toplam]) => ({ ad, toplam }))
 
   let dilimler: Dilim[] = sirali
+  let katlananlar: Dilim[] = []
   if (sirali.length > EN_FAZLA_DILIM + 1) {
     const bas = sirali.slice(0, EN_FAZLA_DILIM)
-    const kalan = sirali.slice(EN_FAZLA_DILIM).reduce((s, d) => s + d.toplam, 0)
+    katlananlar = sirali.slice(EN_FAZLA_DILIM)
+    const kalan = katlananlar.reduce((s, d) => s + d.toplam, 0)
     dilimler = [...bas, { ad: DIGER, toplam: kalan }]
   }
   const toplam = dilimler.reduce((s, d) => s + d.toplam, 0)
-  return { dilimler, toplam, aylar, katlanan: Math.max(0, sirali.length - EN_FAZLA_DILIM) }
+  return { dilimler, toplam, aylar, katlananlar, katlanan: katlananlar.length }
+}
+
+/** Secili kategorinin alt kategori toplamlari, ayni pencerede, buyukten kucuge. */
+function altKirilim(kayitlar: AylikKategori[], yon: Yon, kategori: string, aylar: string[]) {
+  const pencere = new Set(aylar)
+  const t = new Map<string, number>()
+  for (const k of kayitlar) {
+    if (k.yon !== yon || k.kategori !== kategori || !pencere.has(k.ay)) continue
+    t.set(k.alt, (t.get(k.alt) ?? 0) + Number(k.toplam))
+  }
+  return [...t.entries()]
+    .filter(([, v]) => v > 0)
+    .sort((a, b) => b[1] - a[1] || trSirala(a[0], b[0]))
+    .map(([ad, toplam]) => ({ ad: ad === '—' ? '(alt kategori yok)' : ad, toplam }))
 }
 
 function PastaGorunumu({
-  kayitlar, yon, seciliAy, kayit,
+  kayitlar, yon, seciliAy, kayit, altKategoriler,
 }: {
   kayitlar: KategoriSerisi[]
   yon: Yon
   seciliAy: string
   kayit: YuvaKaydi
+  altKategoriler: AylikKategori[]
 }) {
   const [aralik, setAralik] = useState<PastaAralik>('1')
+  // Tiklanan dilim: alt kategori kirilimi acilir. Pencere degisince kapanir.
+  const [secili, setSecili] = useState<string | null>(null)
+  function aralikDegistir(a: PastaAralik) { setAralik(a); setSecili(null) }
+  function sec(ad: string | undefined) { if (ad) setSecili((s) => (s === ad ? null : ad)) }
+  useEffect(() => {
+    if (!secili) return
+    const kacis = (e: KeyboardEvent) => { if (e.key === 'Escape') setSecili(null) }
+    document.addEventListener('keydown', kacis)
+    return () => document.removeEventListener('keydown', kacis)
+  }, [secili])
   const hesap = useMemo(
     () => dilimleriHesapla(kayitlar, yon, seciliAy, aralik),
     [kayitlar, yon, seciliAy, aralik],
@@ -405,7 +434,14 @@ function PastaGorunumu({
   useEffect(() => { garanti(adlar) }, [garanti, adlar])
   const renk = (ad: string) => (ad === DIGER ? NOTR_RENK : SERI_RENKLERI[yuvalar[ad] ?? 0])
 
-  const { dilimler, toplam, aylar, katlanan } = hesap
+  const { dilimler, toplam, aylar, katlanan, katlananlar } = hesap
+  const kirilim = useMemo(() => {
+    if (!secili) return null
+    if (secili === DIGER) return { baslik: 'Diğer · katlanan kategoriler', satirlar: katlananlar, payda: toplam }
+    const satirlar = altKirilim(altKategoriler, yon, secili, aylar)
+    const kategoriToplami = dilimler.find((d) => d.ad === secili)?.toplam ?? 0
+    return { baslik: `${secili} · alt kategoriler`, satirlar, payda: kategoriToplami }
+  }, [secili, katlananlar, toplam, altKategoriler, yon, aylar, dilimler])
   const ilk = aylar[0]
   const son = aylar.at(-1)
   const pencereEtiketi =
@@ -416,7 +452,7 @@ function PastaGorunumu({
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <SecimGrubu secenekler={PASTA_ARALIKLARI} deger={aralik} degistir={setAralik} etiket="Pencere" />
+        <SecimGrubu secenekler={PASTA_ARALIKLARI} deger={aralik} degistir={aralikDegistir} etiket="Pencere" />
         <span className="text-[12px]" style={{ color: 'var(--ink-muted)' }}>{pencereEtiketi}</span>
       </div>
 
@@ -443,8 +479,16 @@ function PastaGorunumu({
                   startAngle={90}
                   endAngle={-270}
                   isAnimationActive={false}
+                  onClick={(_, i) => sec(dilimler[i]?.ad)}
+                  style={{ cursor: 'pointer' }}
                 >
-                  {dilimler.map((d) => <Cell key={d.ad} fill={renk(d.ad)} />)}
+                  {dilimler.map((d) => (
+                    <Cell
+                      key={d.ad}
+                      fill={renk(d.ad)}
+                      fillOpacity={secili && secili !== d.ad ? 0.3 : 1}
+                    />
+                  ))}
                 </Pie>
                 <Tooltip content={<PastaIpucu toplam={toplam} renk={renk} />} />
               </PieChart>
@@ -458,26 +502,81 @@ function PastaGorunumu({
 
           {/* Liste: kimlik hicbir zaman yalniz renkle tasinmaz. */}
           <ul className="min-w-[220px] flex-1">
-            {dilimler.map((d) => (
-              <li key={d.ad} className="flex items-baseline gap-2 py-1.5 text-[13px]">
-                <span
-                  aria-hidden
-                  className="mt-0.5 inline-block h-2 w-2 shrink-0 self-center rounded-full"
-                  style={{ background: renk(d.ad) }}
-                />
-                <span className="truncate" style={{ color: d.ad === DIGER ? 'var(--ink-muted)' : 'var(--ink)' }}>
-                  {d.ad}
-                  {d.ad === DIGER && katlanan > 0 && (
-                    <span className="ml-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>· {katlanan} kategori</span>
-                  )}
-                </span>
-                <span className="rakam ml-auto shrink-0 font-medium">{tl(d.toplam)}</span>
-                <span className="rakam w-12 shrink-0 text-right text-[12px]" style={{ color: 'var(--ink-muted)' }}>
-                  {yuzde(d.toplam / toplam)}
-                </span>
-              </li>
-            ))}
+            {dilimler.map((d) => {
+              const bu = secili === d.ad
+              const soluk = secili !== null && !bu
+              return (
+                <li key={d.ad}>
+                  <button
+                    type="button"
+                    onClick={() => sec(d.ad)}
+                    aria-pressed={bu}
+                    className="flex w-full items-baseline gap-2 rounded-md px-1.5 py-1.5 text-left text-[13px] hover:bg-[var(--plane)]"
+                    style={{ background: bu ? 'var(--plane)' : undefined, opacity: soluk ? 0.55 : 1 }}
+                  >
+                    <span
+                      aria-hidden
+                      className="inline-block h-2 w-2 shrink-0 self-center rounded-full"
+                      style={{ background: renk(d.ad) }}
+                    />
+                    <span className="truncate" style={{ color: d.ad === DIGER ? 'var(--ink-muted)' : 'var(--ink)', fontWeight: bu ? 600 : 400 }}>
+                      {d.ad}
+                      {d.ad === DIGER && katlanan > 0 && (
+                        <span className="ml-1 text-[11px] font-normal" style={{ color: 'var(--ink-muted)' }}>· {katlanan} kategori</span>
+                      )}
+                    </span>
+                    <span className="rakam ml-auto shrink-0 font-medium">{tl(d.toplam)}</span>
+                    <span className="rakam w-12 shrink-0 text-right text-[12px]" style={{ color: 'var(--ink-muted)' }}>
+                      {yuzde(d.toplam / toplam)}
+                    </span>
+                  </button>
+                </li>
+              )
+            })}
           </ul>
+        </div>
+      )}
+
+      {kirilim && (
+        <div className="mt-4 rounded-lg p-3" style={{ border: '1px solid var(--hair)', background: 'var(--plane)' }}>
+          <div className="mb-2 flex items-baseline justify-between gap-3">
+            <span className="text-[13px] font-semibold">
+              <span aria-hidden className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle" style={{ background: renk(secili!) }} />
+              {kirilim.baslik}
+              <span className="ml-2 text-[11px] font-normal" style={{ color: 'var(--ink-muted)' }}>{pencereEtiketi}</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setSecili(null)}
+              className="shrink-0 text-[12px]"
+              style={{ color: 'var(--ink-muted)' }}
+              aria-label="Kırılımı kapat"
+            >
+              kapat ✕
+            </button>
+          </div>
+          {kirilim.satirlar.length === 0 ? (
+            <p className="py-4 text-center text-[12px]" style={{ color: 'var(--ink-muted)' }}>Bu pencerede kırılım yok.</p>
+          ) : (
+            <ul className="max-h-[320px] overflow-y-auto">
+              {kirilim.satirlar.map((r) => {
+                const enBuyuk = kirilim.satirlar[0].toplam
+                return (
+                  <li key={r.ad} className="grid items-center gap-x-3 py-1 text-[12px]" style={{ gridTemplateColumns: 'minmax(120px, 1fr) minmax(80px, 2fr) auto auto' }}>
+                    <span className="truncate">{r.ad}</span>
+                    {/* Tek renk, buyukluk: secili kategorinin rengiyle ince cubuk */}
+                    <span className="h-2 overflow-hidden rounded-full" style={{ background: 'var(--grid)' }} aria-hidden>
+                      <span className="block h-full rounded-full" style={{ width: `${Math.max(2, (r.toplam / enBuyuk) * 100)}%`, background: renk(secili!) }} />
+                    </span>
+                    <span className="rakam text-right font-medium">{tl(r.toplam)}</span>
+                    <span className="rakam w-12 text-right" style={{ color: 'var(--ink-muted)' }}>
+                      {kirilim.payda > 0 ? yuzde(r.toplam / kirilim.payda) : '—'}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
         </div>
       )}
     </div>

@@ -1,6 +1,6 @@
 import { supabaseSunucu } from '@/lib/supabase/server'
 import type {
-  AylikOzet, Islem, Kart, KategoriBant, KategoriSerisi, PortfoyGetiri, TaksitPlani, Taksonomi, Kural,
+  AylikKategori, AylikOzet, Islem, Kart, KategoriBant, KategoriSerisi, PortfoyGetiri, TaksitPlani, Taksonomi, Kural,
 } from '@/lib/tipler'
 
 /**
@@ -17,7 +17,7 @@ export async function panoVerisi(seciliAy: string) {
   const sb = await supabaseSunucu()
 
   const [
-    ozet, hafta, ay, yil, portfoy, kartlar, taksitler, sonIslemler, soruSayisi, bant,
+    ozet, hafta, ay, yil, portfoy, kartlar, taksitler, sonIslemler, soruSayisi, bant, altKategoriler,
   ] = await Promise.all([
     sb.from('v_aylik_ozet').select('*').order('ay'),
     sb.rpc('kategori_serisi', { p_bucket: 'hafta' }),
@@ -29,6 +29,7 @@ export async function panoVerisi(seciliAy: string) {
     sb.from('islemler').select('*').order('tarih', { ascending: false }).order('id', { ascending: false }).limit(15),
     sb.from('islemler').select('id', { count: 'exact', head: true }).eq('durum', 'Soruldu'),
     sb.rpc('kategori_bant', { ref_ay: seciliAy }),
+    sb.from('v_aylik_kategori').select('ay,yon,kategori,alt,toplam,adet'),
   ])
 
   return {
@@ -44,7 +45,8 @@ export async function panoVerisi(seciliAy: string) {
     sonIslemler: (sonIslemler.data ?? []) as Islem[],
     soruSayisi: soruSayisi.count ?? 0,
     bant: (bant.data ?? []) as KategoriBant[],
-    hatalar: [ozet, hafta, ay, yil, portfoy, kartlar, taksitler, sonIslemler, bant]
+    altKategoriler: (altKategoriler.data ?? []) as AylikKategori[],
+    hatalar: [ozet, hafta, ay, yil, portfoy, kartlar, taksitler, sonIslemler, bant, altKategoriler]
       .map((s) => s.error?.message)
       .filter(Boolean) as string[],
   }

@@ -124,6 +124,17 @@ export type AylikOzet = {
   net: string | null
 }
 
+/** v_aylik_kategori — ay x kategori x ALT kategori; arsiv + canli birlikte. Pasta kirilimi bunu okur. */
+export type AylikKategori = {
+  ay: string
+  yon: Yon
+  kategori: string
+  /** Alt kategori; yoksa '—'. */
+  alt: string
+  toplam: string
+  adet: number
+}
+
 export type KategoriSerisi = {
   donem: string
   kategori: string
