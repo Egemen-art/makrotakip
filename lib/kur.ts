@@ -95,6 +95,11 @@ export async function kurlariGetir(): Promise<Kurlar> {
   const [t, e, f, g] = await Promise.allSettled([truncgil(), erApi(), frankfurter(), goldApi()])
   const ok = <T,>(r: PromiseSettledResult<T>) => (r.status === 'fulfilled' ? r.value : null)
   const T = ok(t), E = ok(e), F = ok(f), G = ok(g)
+  // Reddedilenlerin nedeni yanitta gorunsun — sessiz dusus yok.
+  const hatalar: Record<string, string> = {}
+  for (const [ad, r] of [['truncgil', t], ['erApi', e], ['frankfurter', f], ['goldApi', g]] as const) {
+    if (r.status === 'rejected') hatalar[ad] = r.reason instanceof Error ? `${r.reason.name}: ${r.reason.message}` : String(r.reason)
+  }
 
   const uyarilar: string[] = []
   const kaynak: Kurlar['kaynak'] = { usd: null, eur: null, altin_gram: null, ons: null }
@@ -136,6 +141,7 @@ export async function kurlariGetir(): Promise<Kurlar> {
     altin_ons_usd: yuvarla(ons, 2),
     kaynak,
     uyarilar,
+    hatalar,
   }
   // Yalniz kullanilabilir bir sonuc onbellege girer; hepsi bos geldiyse bir sonraki istek yeniden dener.
   if (sonuc.usdtry !== null || sonuc.altin_gram_alis_tl !== null) onbellegeYaz(sonuc)

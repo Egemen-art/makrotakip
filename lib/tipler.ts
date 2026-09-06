@@ -126,6 +126,8 @@ export type Kurlar = {
   altin_ons_usd: number | null
   kaynak: { usd: string | null; eur: string | null; altin_gram: string | null; ons: string | null }
   uyarilar: string[]
+  /** Reddedilen kaynaklar ve nedenleri (teshis; form kullanmaz). */
+  hatalar: Record<string, string>
 }
 
 export type PortfoyGetiri = Portfoy & {
