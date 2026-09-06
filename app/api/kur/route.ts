@@ -4,7 +4,7 @@ import { kaynakTanisi, kurlariGetir } from '@/lib/kur'
 /**
  * GET /api/kur — canli piyasa kurlari (USD/TRY, EUR/TRY, gram altin, ons).
  * Yalniz herkese acik piyasa verisi tasir; kimlik gerektirmez (proxy.ts'te muaf).
- * Ust kaynak cagrilari 5 dk onbelleklenir (fetch revalidate).
+ * Dogrulanmis sonuc 5 dk onbelleklenir (lib/kur.ts); ust cagrilar no-store.
  * ?ham=1 — teshis: her kaynagin HTTP durumu ve govde basi (onbelleksiz).
  */
 export const dynamic = 'force-dynamic'

@@ -139,12 +139,7 @@ export async function kurlariGetir(): Promise<Kurlar> {
   }
   // Yalniz kullanilabilir bir sonuc onbellege girer; hepsi bos geldiyse bir sonraki istek yeniden dener.
   if (sonuc.usdtry !== null || sonuc.altin_gram_alis_tl !== null) onbellegeYaz(sonuc)
-  // Gercek ayristirici ne goruyor?
-  let truncgilAyristirma: unknown
-  try { truncgilAyristirma = await truncgil() } catch (e) { truncgilAyristirma = { hata: e instanceof Error ? `${e.name}: ${e.message}` : String(e) } }
-  let truncgilAnahtarlar: string[] | string = ''
-  try { truncgilAnahtarlar = Object.keys(await jsonGetir(KAYNAK_URLLERI.truncgil)) } catch (e) { truncgilAnahtarlar = String(e) }
-  return { kaynaklar: sonuc, truncgil_ayristirma: truncgilAyristirma, truncgil_anahtarlar: truncgilAnahtarlar }
+  return sonuc
 }
 
 /* ── Onbellek: dogrulanmis sonuc, 5 dk, fonksiyon ornegi basina ─────────── */
@@ -179,5 +174,10 @@ export async function kaynakTanisi() {
       sonuc[ad] = { ok: false, status: null, ms: Date.now() - t0, tip: null, bas: '', hata: e instanceof Error ? `${e.name}: ${e.message}` : String(e) }
     }
   }))
-  return sonuc
+  // Gercek ayristirici ne goruyor?
+  let truncgilAyristirma: unknown
+  try { truncgilAyristirma = await truncgil() } catch (e) { truncgilAyristirma = { hata: e instanceof Error ? `${e.name}: ${e.message}` : String(e) } }
+  let truncgilAnahtarlar: string[] | string = ''
+  try { truncgilAnahtarlar = Object.keys(await jsonGetir(KAYNAK_URLLERI.truncgil)) } catch (e) { truncgilAnahtarlar = String(e) }
+  return { kaynaklar: sonuc, truncgil_ayristirma: truncgilAyristirma, truncgil_anahtarlar: truncgilAnahtarlar }
 }
