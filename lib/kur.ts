@@ -23,16 +23,20 @@ async function jsonGetir(url: string): Promise<Ham> {
   const r = await fetch(url, {
     signal: AbortSignal.timeout(ZAMAN_ASIMI_MS),
     headers: { accept: 'application/json', 'user-agent': 'finans-takip/1.0' },
-    next: { revalidate: 300 },
+    cache: 'no-store',
   })
   if (!r.ok) throw new Error(`${url} -> HTTP ${r.status}`)
-  return (await r.json()) as Ham
+  const govde = await r.text()
+  try { return JSON.parse(govde) as Ham }
+  catch { throw new Error(`${url} -> JSON degil (${r.headers.get('content-type')}): ${govde.slice(0, 80)}`) }
 }
 
 /** Nesnede adi "alis"/"satis" gibi baslayan anahtari bul (Alış, Alis, Buying...). */
 function alan(o: unknown, ...adaylar: string[]): number | null {
   if (!o || typeof o !== 'object') return null
-  const norm = (k: string) => k.toLocaleLowerCase('tr').replace(/ı/g, 'i').replace(/ş/g, 's').replace(/[^a-z]/g, '')
+  const norm = (k: string) => k.toLocaleLowerCase('tr')
+    .replace(/ı/g, 'i').replace(/ş/g, 's').replace(/ç/g, 'c').replace(/ğ/g, 'g').replace(/ö/g, 'o').replace(/ü/g, 'u')
+    .replace(/[^a-z]/g, '')
   for (const [k, v] of Object.entries(o as Ham)) {
     const nk = norm(k)
     if (adaylar.some((a) => nk.startsWith(a))) {
@@ -79,23 +83,18 @@ async function goldApi() {
   return { ons_usd: sayi(j.price) }
 }
 
-/** Ons TRY (goldprice.org) -> has altin gram TL; piyasa makasi yok. Yedek. */
-async function goldpriceTry() {
-  const j = await jsonGetir('https://data-asg.goldprice.org/dbXRates/TRY')
-  const ilk = (Array.isArray(j.items) ? j.items[0] : null) as Ham | null
-  const onsTry = ilk ? sayi(ilk.xauPrice) : null
-  return { gram_has_tl: onsTry !== null ? onsTry / TROY_ONS_GRAM : null }
-}
-
 /* ── Birlestirme ───────────────────────────────────────────────────────── */
 
 const yuvarla = (n: number | null, basamak: number) =>
   n === null ? null : Number(n.toFixed(basamak))
 
 export async function kurlariGetir(): Promise<Kurlar> {
-  const [t, e, f, g, p] = await Promise.allSettled([truncgil(), erApi(), frankfurter(), goldApi(), goldpriceTry()])
+  const onbellek = onbellektenOku()
+  if (onbellek) return onbellek
+
+  const [t, e, f, g] = await Promise.allSettled([truncgil(), erApi(), frankfurter(), goldApi()])
   const ok = <T,>(r: PromiseSettledResult<T>) => (r.status === 'fulfilled' ? r.value : null)
-  const T = ok(t), E = ok(e), F = ok(f), G = ok(g), P = ok(p)
+  const T = ok(t), E = ok(e), F = ok(f), G = ok(g)
 
   const uyarilar: string[] = []
   const kaynak: Kurlar['kaynak'] = { usd: null, eur: null, altin_gram: null, ons: null }
@@ -122,11 +121,10 @@ export async function kurlariGetir(): Promise<Kurlar> {
   let gramAlis: number | null = null
   let gramSatis: number | null = null
   if (T?.gram_alis) { gramAlis = T.gram_alis; gramSatis = T.gram_satis ?? null; kaynak.altin_gram = 'piyasa gram alış (truncgil)' }
-  else if (P?.gram_has_tl) { gramAlis = P.gram_has_tl; kaynak.altin_gram = 'has altın: ons TL / 31,1035 (goldprice)'; uyarilar.push('Piyasa gram alış gelmedi; has altın (ons/31,1035) kullanıldı — piyasa gramından biraz düşük kalır.') }
   else if (ons !== null && usdtry !== null) { gramAlis = (ons / TROY_ONS_GRAM) * usdtry; kaynak.altin_gram = 'has altın: ons USD × USD/TRY'; uyarilar.push('Piyasa gram alış gelmedi; ons × kur ile hesaplandı — piyasa gramından biraz düşük kalır.') }
   else uyarilar.push('Gram altın hiçbir kaynaktan gelmedi — elle gir.')
 
-  return {
+  const sonuc: Kurlar = {
     zaman: new Date().toISOString(),
     piyasa_zamani: T?.zaman ?? null,
     usdtry: yuvarla(usdtry, 4),
@@ -139,7 +137,22 @@ export async function kurlariGetir(): Promise<Kurlar> {
     kaynak,
     uyarilar,
   }
+  // Yalniz kullanilabilir bir sonuc onbellege girer; hepsi bos geldiyse bir sonraki istek yeniden dener.
+  if (sonuc.usdtry !== null || sonuc.altin_gram_alis_tl !== null) onbellegeYaz(sonuc)
+  // Gercek ayristirici ne goruyor?
+  let truncgilAyristirma: unknown
+  try { truncgilAyristirma = await truncgil() } catch (e) { truncgilAyristirma = { hata: e instanceof Error ? `${e.name}: ${e.message}` : String(e) } }
+  let truncgilAnahtarlar: string[] | string = ''
+  try { truncgilAnahtarlar = Object.keys(await jsonGetir(KAYNAK_URLLERI.truncgil)) } catch (e) { truncgilAnahtarlar = String(e) }
+  return { kaynaklar: sonuc, truncgil_ayristirma: truncgilAyristirma, truncgil_anahtarlar: truncgilAnahtarlar }
 }
+
+/* ── Onbellek: dogrulanmis sonuc, 5 dk, fonksiyon ornegi basina ─────────── */
+const ONBELLEK_MS = 5 * 60 * 1000
+let onbellekDeger: { zaman: number; deger: Kurlar } | null = null
+const onbellektenOku = () =>
+  onbellekDeger && Date.now() - onbellekDeger.zaman < ONBELLEK_MS ? onbellekDeger.deger : null
+const onbellegeYaz = (deger: Kurlar) => { onbellekDeger = { zaman: Date.now(), deger } }
 
 /* ── Teshis ────────────────────────────────────────────────────────────── */
 
@@ -148,7 +161,6 @@ const KAYNAK_URLLERI: Record<string, string> = {
   erApi: 'https://open.er-api.com/v6/latest/USD',
   frankfurter: 'https://api.frankfurter.app/latest?from=USD&to=TRY,EUR',
   goldApi: 'https://api.gold-api.com/price/XAU',
-  goldpriceTry: 'https://data-asg.goldprice.org/dbXRates/TRY',
 }
 
 /** Her kaynagin ham durumu: HTTP kodu, sure, govdenin basi. Sessiz dususleri gormek icin. */
