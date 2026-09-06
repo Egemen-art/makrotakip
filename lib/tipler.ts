@@ -107,6 +107,25 @@ export type Portfoy = {
   altin_gram_tl: string | null
   not_: string | null
   toplam_tl: string
+  /** Kayit anindaki EUR/TRY (alis); EUR girilen kalemler bununla cevrildi. */
+  eurtry: string | null
+  /** Kayit anindaki ons (USD), bilgi amacli. */
+  altin_ons_usd: string | null
+}
+
+/** /api/kur yaniti. null = o kaynak gelmedi; uyarilar nedenini soyler. Uydurma rakam yok. */
+export type Kurlar = {
+  zaman: string
+  piyasa_zamani: string | null
+  usdtry: number | null
+  eurtry: number | null
+  usdtry_satis: number | null
+  eurtry_satis: number | null
+  altin_gram_alis_tl: number | null
+  altin_gram_satis_tl: number | null
+  altin_ons_usd: number | null
+  kaynak: { usd: string | null; eur: string | null; altin_gram: string | null; ons: string | null }
+  uyarilar: string[]
 }
 
 export type PortfoyGetiri = Portfoy & {

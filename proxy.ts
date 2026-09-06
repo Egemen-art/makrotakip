@@ -41,5 +41,5 @@ export async function proxy(istek: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!api/ingest|_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!api/ingest|api/kur|_next/static|_next/image|favicon.ico).*)'],
 }
