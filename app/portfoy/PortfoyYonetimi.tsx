@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState, useTransition } from 'react'
-import type { Kurlar, PortfoyGetiri } from '@/lib/tipler'
+import type { HesapBakiye, Kurlar, PortfoyGetiri } from '@/lib/tipler'
 import { bugun, sayiOku, tarihKisa, tl, tlKurus, yuzde } from '@/lib/bicim'
 import { portfoyKaydet, portfoySil, type Birim } from './eylemler'
 
@@ -32,7 +32,7 @@ const BIRIM_ETIKETI: Record<Birim, string> = { TRY: '₺', USD: '$', EUR: '€',
 const girdiMetni = (n: number | null | undefined, basamak = 2) =>
   n === null || n === undefined || !isFinite(n) ? '' : n.toFixed(basamak).replace(/\.?0+$/, '').replace('.', ',')
 
-export default function PortfoyYonetimi({ satirlar }: { satirlar: PortfoyGetiri[] }) {
+export default function PortfoyYonetimi({ satirlar, ykBakiye }: { satirlar: PortfoyGetiri[]; ykBakiye: HesapBakiye | null }) {
   const [acik, setAcik] = useState(false)
   const [hata, setHata] = useState<string | null>(null)
   const [bekliyor, basla] = useTransition()
@@ -47,8 +47,13 @@ export default function PortfoyYonetimi({ satirlar }: { satirlar: PortfoyGetiri[
     for (const k of KALEMLER) m[k.ad] = girdiMetni(s(k.ad))
     if (son?.altin_gram_tl && s('altin_gram_tl') > 0) m.altin_fiziksel = girdiMetni(s('altin_fiziksel') / s('altin_gram_tl'), 3)
     if (son?.usdtry && s('usdtry') > 0) m.hisse_abd = girdiMetni(s('hisse_abd') / s('usdtry'))
+    // Nakit: gorevin yazdigi en son YK guncel bakiyesi varsa o; yoksa son kayittaki deger.
+    if (ykBakiye) m.nakit = girdiMetni(Number(ykBakiye.bakiye))
     return m
   })
+  const ykGunFarki = ykBakiye
+    ? Math.round((Date.parse(bugun()) - Date.parse(ykBakiye.tarih)) / 86_400_000)
+    : null
   const [birim, setBirim] = useState<Record<Alan, Birim>>(() => {
     const b = {} as Record<Alan, Birim>
     for (const k of KALEMLER) b[k.ad] = k.varsayilan
@@ -196,7 +201,13 @@ export default function PortfoyYonetimi({ satirlar }: { satirlar: PortfoyGetiri[
                     )}
                   </div>
                   <div className="rakam mt-0.5 text-[11px]" style={{ color: deger === null ? 'var(--kritik)' : 'var(--ink-muted)' }}>
-                    {b === 'TRY' ? ' ' : deger === null ? 'kur yok' : `= ${tl(deger)}`}
+                    {k.ad === 'nakit' && b === 'TRY'
+                      ? (ykBakiye
+                          ? <span style={{ color: (ykGunFarki ?? 0) > 3 ? 'var(--ciddi)' : 'var(--ink-muted)' }}>
+                              YK güncel bakiye · {tarihKisa(ykBakiye.tarih)}{(ykGunFarki ?? 0) > 3 ? ` · ${ykGunFarki} gün eski` : ''}
+                            </span>
+                          : <span>YK bakiyesi henüz yazılmamış · elle gir</span>)
+                      : b === 'TRY' ? ' ' : deger === null ? 'kur yok' : `= ${tl(deger)}`}
                   </div>
                 </Alan>
               )
