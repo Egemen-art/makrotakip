@@ -57,3 +57,20 @@ export function bugun() {
     timeZone: 'Europe/Istanbul',
   }).format(new Date())
 }
+
+/**
+ * Kullanicinin yazdigi sayiyi oku. "48,25" · "48.25" · "1.234,56" · "1234.56" · "1.234" (=1234).
+ * Tek nokta + tam 3 basamakli gruplar binlik ayiracidir; aksi halde ondalik.
+ * Eski form "48.25"i 4825 okuyordu — bu onu duzeltir.
+ */
+export function sayiOku(v: unknown): number | null {
+  if (typeof v === 'number') return isFinite(v) ? v : null
+  if (typeof v !== 'string') return null
+  let s = v.trim().replace(/[^\d.,-]/g, '')
+  if (!s) return null
+  if (s.includes(',') && s.includes('.')) s = s.replace(/\./g, '').replace(',', '.')
+  else if (s.includes(',')) s = s.replace(',', '.')
+  else if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '')
+  const n = Number(s)
+  return isFinite(n) ? n : null
+}

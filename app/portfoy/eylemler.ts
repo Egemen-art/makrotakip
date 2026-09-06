@@ -2,15 +2,24 @@
 
 import { revalidatePath } from 'next/cache'
 import { supabaseSunucu } from '@/lib/supabase/server'
+import { sayiOku } from '@/lib/bicim'
 
 export type Sonuc = { tamam: true } | { tamam: false; hata: string }
 
-const sayi = (d: FormDataEntryValue | null, varsayilan: number | null = 0) => {
-  const s = String(d ?? '').trim().replace(/\./g, '').replace(',', '.')
-  if (s === '') return varsayilan
-  const n = Number(s)
-  return isFinite(n) ? n : varsayilan
+/** Formdaki para/miktar birimleri. Sunucu TL'ye burada cevirir; istemcideki onizleme sadece gosterimdir. */
+export type Birim = 'TRY' | 'USD' | 'EUR' | 'GRAM'
+const BIRIMLER: Birim[] = ['TRY', 'USD', 'EUR', 'GRAM']
+
+const KALEMLER = [
+  'ppf', 'vadeli_mevduat', 'hisse_abd', 'hisse_bist',
+  'altin_fiziksel', 'altin_etf', 'nakit', 'bes',
+] as const
+const ETIKET: Record<(typeof KALEMLER)[number], string> = {
+  ppf: 'PPF', vadeli_mevduat: 'Vadeli mevduat', hisse_abd: 'Hisse (ABD)', hisse_bist: 'Hisse (BİST)',
+  altin_fiziksel: 'Altın (fiziksel)', altin_etf: 'Altın (ETF)', nakit: 'Nakit', bes: 'BES',
 }
+
+const kurus = (n: number) => Math.round(n * 100) / 100
 
 export async function portfoyKaydet(form: FormData): Promise<Sonuc> {
   const sb = await supabaseSunucu()
@@ -18,23 +27,39 @@ export async function portfoyKaydet(form: FormData): Promise<Sonuc> {
   const tarih = String(form.get('tarih') ?? '').trim()
   if (!tarih) return { tamam: false, hata: 'Tarih gerekli.' }
 
-  // TUZAK: eklenen_cekilen bos birakilirsa getiri olduğundan yuksek cikar.
+  // TUZAK: eklenen_cekilen bos birakilirsa getiri oldugundan yuksek cikar.
   // Para girisi yoksa 0 yazilir — burada zorlaniyor.
-  const eklenenCekilen = sayi(form.get('eklenen_cekilen'), 0) ?? 0
+  const eklenenCekilen = sayiOku(form.get('eklenen_cekilen')) ?? 0
+
+  // Kurlar: kayit ANINDA dondurulur. Bos = o birim kullanilamaz.
+  const usdtry = sayiOku(form.get('usdtry'))
+  const eurtry = sayiOku(form.get('eurtry'))
+  const altinGramTl = sayiOku(form.get('altin_gram_tl'))
+  const altinOnsUsd = sayiOku(form.get('altin_ons_usd'))
+
+  const kur: Record<Birim, number | null> = { TRY: 1, USD: usdtry, EUR: eurtry, GRAM: altinGramTl }
+  const kurAdi: Record<Birim, string> = { TRY: '', USD: 'USD/TRY', EUR: 'EUR/TRY', GRAM: 'gram altın fiyatı' }
+
+  const tl: Record<string, number> = {}
+  for (const k of KALEMLER) {
+    const miktar = sayiOku(form.get(k)) ?? 0
+    const birimHam = String(form.get(`${k}_birim`) ?? 'TRY').toUpperCase()
+    const birim = (BIRIMLER as string[]).includes(birimHam) ? (birimHam as Birim) : 'TRY'
+    if (miktar === 0) { tl[k] = 0; continue }
+    const oran = kur[birim]
+    if (oran === null || oran <= 0) {
+      return { tamam: false, hata: `${ETIKET[k]} ${birim === 'GRAM' ? 'gram' : birim} ile girildi ama ${kurAdi[birim]} boş. Kuru gir ya da birimi ₺ yap.` }
+    }
+    tl[k] = kurus(miktar * oran)
+  }
 
   const satir = {
     tarih,
-    ppf: sayi(form.get('ppf')) ?? 0,
-    vadeli_mevduat: sayi(form.get('vadeli_mevduat')) ?? 0,
-    hisse_abd: sayi(form.get('hisse_abd')) ?? 0,
-    hisse_bist: sayi(form.get('hisse_bist')) ?? 0,
-    altin_fiziksel: sayi(form.get('altin_fiziksel')) ?? 0,
-    altin_etf: sayi(form.get('altin_etf')) ?? 0,
-    nakit: sayi(form.get('nakit')) ?? 0,
-    bes: sayi(form.get('bes')) ?? 0,
+    ...tl,
     eklenen_cekilen: eklenenCekilen,
-    usdtry: sayi(form.get('usdtry'), null),
-    altin_gram_tl: sayi(form.get('altin_gram_tl'), null),
+    usdtry, eurtry,
+    altin_gram_tl: altinGramTl,
+    altin_ons_usd: altinOnsUsd,
     not_: String(form.get('not_') ?? '').trim() || null,
   }
 
