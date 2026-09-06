@@ -1,28 +1,23 @@
 import { supabaseSunucu } from '@/lib/supabase/server'
-import type { PortfoyGetiri } from '@/lib/tipler'
+import type { HesapBakiye, PortfoyGetiri } from '@/lib/tipler'
 import PortfoyGrafigi from '@/components/grafik/PortfoyGrafigi'
 import PortfoyYonetimi from './PortfoyYonetimi'
+import PortfoyDagilim from './PortfoyDagilim'
 import { tarihKisa, tl, yuzde } from '@/lib/bicim'
 
 export const dynamic = 'force-dynamic'
 
 const say = (n: string | null | undefined) => Number(n ?? 0)
 
-const KALEMLER: { anahtar: keyof PortfoyGetiri; ad: string }[] = [
-  { anahtar: 'ppf', ad: 'PPF' },
-  { anahtar: 'vadeli_mevduat', ad: 'Vadeli mevduat' },
-  { anahtar: 'hisse_abd', ad: 'Hisse (ABD)' },
-  { anahtar: 'hisse_bist', ad: 'Hisse (BİST)' },
-  { anahtar: 'altin_fiziksel', ad: 'Altın (fiziksel)' },
-  { anahtar: 'altin_etf', ad: 'Altın (ETF)' },
-  { anahtar: 'nakit', ad: 'Nakit' },
-  { anahtar: 'bes', ad: 'BES' },
-]
-
 export default async function PortfoySayfasi() {
   const sb = await supabaseSunucu()
-  const { data, error } = await sb.from('v_portfoy_getiri').select('*').order('tarih')
+  const [{ data, error }, yk] = await Promise.all([
+    sb.from('v_portfoy_getiri').select('*').order('tarih'),
+    // Nakit on-dolumu: gorevin her sabah yazdigi YK "guncel bakiyesi" (karar 39).
+    sb.from('hesap_bakiye').select('*').eq('hesap', 'YK').order('tarih', { ascending: false }).limit(1),
+  ])
   const satirlar = (data ?? []) as PortfoyGetiri[]
+  const ykBakiye = ((yk.data ?? [])[0] ?? null) as HesapBakiye | null
   const son = satirlar.at(-1)
 
   return (
@@ -83,35 +78,9 @@ export default async function PortfoySayfasi() {
         </div>
       </section>
 
-      {son && (
-        <section className="mt-6">
-          <h2 className="mb-2 text-[15px] font-semibold">Son dağılım</h2>
-          <div className="kart p-4">
-            {KALEMLER.filter((k) => say(son[k.anahtar] as string) !== 0).map((k) => {
-              const tutar = say(son[k.anahtar] as string)
-              const pay = tutar / say(son.toplam_tl)
-              return (
-                <div key={k.anahtar} className="py-1">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="text-[13px]" style={{ color: 'var(--ink-2)' }}>{k.ad}</span>
-                    <span className="rakam text-[13px]">
-                      {tl(tutar)}
-                      <span className="ml-2 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
-                        {yuzde(pay)}
-                      </span>
-                    </span>
-                  </div>
-                  <div className="mt-1 h-1.5 overflow-hidden rounded-full" style={{ background: 'var(--grid)' }}>
-                    <div className="h-full rounded-full" style={{ width: `${pay * 100}%`, background: 'var(--seri-1)' }} />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </section>
-      )}
+      <PortfoyDagilim satirlar={satirlar} />
 
-      <PortfoyYonetimi satirlar={satirlar} />
+      <PortfoyYonetimi satirlar={satirlar} ykBakiye={ykBakiye} />
     </>
   )
 }

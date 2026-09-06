@@ -113,6 +113,16 @@ export type Portfoy = {
   altin_ons_usd: string | null
 }
 
+/** finans.hesap_bakiye — banka hesap bakiyesi, gun bazinda. Gorev YK "guncel bakiyesi"ni yazar. */
+export type HesapBakiye = {
+  id: number
+  hesap: string
+  tarih: string
+  bakiye: string
+  kaynak: string | null
+  eklendi: string
+}
+
 /** /api/kur yaniti. null = o kaynak gelmedi; uyarilar nedenini soyler. Uydurma rakam yok. */
 export type Kurlar = {
   zaman: string
