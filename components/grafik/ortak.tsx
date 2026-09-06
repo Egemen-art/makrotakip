@@ -8,6 +8,7 @@ const KISA = new Intl.NumberFormat('tr-TR', {
   maximumFractionDigits: 1,
 })
 export const eksenTL = (n: number) => (n === 0 ? '0' : `₺${KISA.format(n)}`)
+export const eksenUSD = (n: number) => (n === 0 ? '0' : `$${KISA.format(n)}`)
 
 /** Eksen degerlerini yuvarlak sayilara oturtan ust sinir. */
 export function ustSinir(enBuyuk: number) {
@@ -29,12 +30,14 @@ type IpucuGirdi = { name?: string; value?: number; color?: string; dataKey?: str
 
 /** Ortak hover ipucu. Metin daima metin renginde; kimligi yanindaki renk noktasi tasir. */
 export function Ipucu({
-  active, payload, label, donemMi = true,
+  active, payload, label, donemMi = true, bicim = tlKurus,
 }: {
   active?: boolean
   payload?: IpucuGirdi[]
   label?: string
   donemMi?: boolean
+  /** Deger bicimleyici; varsayilan TL kurus. USD icin usdKurus ver. */
+  bicim?: (n: number) => string
 }) {
   if (!active || !payload?.length) return null
   const gorunen = payload.filter((p) => p.value !== undefined && p.value !== null)
@@ -58,7 +61,7 @@ export function Ipucu({
             style={{ background: p.color }}
           />
           <span style={{ color: 'var(--ink-2)' }}>{p.name}</span>
-          <span className="rakam ml-auto font-medium">{tlKurus(p.value!)}</span>
+          <span className="rakam ml-auto font-medium">{bicim(p.value!)}</span>
         </div>
       ))}
     </div>

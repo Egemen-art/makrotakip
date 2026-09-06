@@ -6,7 +6,8 @@ import {
 } from 'recharts'
 import type { PortfoyGetiri } from '@/lib/tipler'
 import { tarihKisa, tl, tlKurus, yuzde } from '@/lib/bicim'
-import { EKSEN_STILI, Ipucu, SERI_RENKLERI, SecimGrubu, eksenTL, ustSinir } from '@/components/grafik/ortak'
+import { EKSEN_STILI, Ipucu, SERI_RENKLERI, SecimGrubu, eksenTL, eksenUSD, ustSinir } from '@/components/grafik/ortak'
+import { bicimle, bicimleKurus, cevir, type Para } from '@/lib/portfoy'
 
 type Sinif = 'ppf' | 'vadeli_mevduat' | 'hisse_abd' | 'hisse_bist' | 'altin_fiziksel' | 'altin_etf' | 'nakit' | 'bes'
 type Gorunum = 'liste' | 'pasta'
@@ -29,17 +30,18 @@ const renk = (ad: Sinif) => SERI_RENKLERI[KALEMLER.findIndex((k) => k.ad === ad)
 const say = (n: string | null | undefined) => Number(n ?? 0)
 const oran = (simdi: number, once: number) => (once > 0 ? (simdi - once) / once : null)
 
-export default function PortfoyDagilim({ satirlar }: { satirlar: PortfoyGetiri[] }) {
+export default function PortfoyDagilim({ satirlar, para = 'TRY' }: { satirlar: PortfoyGetiri[]; para?: Para }) {
   const [gorunum, setGorunum] = useState<Gorunum>('liste')
   const [secili, setSecili] = useState<Sinif | null>(null)
 
   const sirali = useMemo(() => [...satirlar].sort((a, b) => a.tarih.localeCompare(b.tarih)), [satirlar])
   const son = sirali.at(-1)
   if (!son) return null
-  const toplam = say(son.toplam_tl)
+  const b = bicimle(para)
+  const toplam = cevir(say(son.toplam_tl), son, para) ?? 0
 
   const dilimler = KALEMLER
-    .map((k) => ({ ...k, tutar: say(son[k.ad]) }))
+    .map((k) => ({ ...k, tutar: cevir(say(son[k.ad]), son, para) ?? 0 }))
     .filter((k) => k.tutar > 0)
     .sort((a, b) => b.tutar - a.tutar)
 
@@ -66,7 +68,7 @@ export default function PortfoyDagilim({ satirlar }: { satirlar: PortfoyGetiri[]
                   {k.etiket}
                 </span>
                 <span className="rakam text-[13px]">
-                  {tl(k.tutar)}
+                  {b(k.tutar)}
                   <span className="ml-2 text-[11px]" style={{ color: 'var(--ink-muted)' }}>{yuzde(pay)}</span>
                 </span>
               </div>
@@ -115,19 +117,19 @@ export default function PortfoyDagilim({ satirlar }: { satirlar: PortfoyGetiri[]
                       <Cell key={d.ad} fill={renk(d.ad)} fillOpacity={secili && secili !== d.ad ? 0.3 : 1} />
                     ))}
                   </Pie>
-                  <Tooltip content={<PastaIpucu toplam={toplam} />} />
+                  <Tooltip content={<PastaIpucu toplam={toplam} para={para} />} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
                 <span className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>toplam</span>
-                <span className="rakam text-[17px] font-semibold leading-tight">{tl(toplam)}</span>
+                <span className="rakam text-[17px] font-semibold leading-tight">{b(toplam)}</span>
               </div>
             </div>
             {liste}
           </div>
         )}
 
-        {secili && <KalemDetayi sinif={secili} sirali={sirali} kapat={() => setSecili(null)} />}
+        {secili && <KalemDetayi sinif={secili} sirali={sirali} para={para} kapat={() => setSecili(null)} />}
       </div>
     </section>
   )
@@ -135,14 +137,19 @@ export default function PortfoyDagilim({ satirlar }: { satirlar: PortfoyGetiri[]
 
 /* ── Secili kalemin seyri ve getirisi ─────────────────────────────────── */
 
-function KalemDetayi({ sinif, sirali, kapat }: { sinif: Sinif; sirali: PortfoyGetiri[]; kapat: () => void }) {
+function KalemDetayi({ sinif, sirali, para, kapat }: { sinif: Sinif; sirali: PortfoyGetiri[]; para: Para; kapat: () => void }) {
   const k = KALEMLER.find((x) => x.ad === sinif)!
+  const b = bicimle(para)
+  const bk = bicimleKurus(para)
   const seri = sirali.map((s) => {
-    const deger = say(s[sinif])
-    // Birim bilgisi: gram = TL / gram fiyati, USD = TL / kur — kur kayitta varsa.
-    const birimFiyat = k.birim === 'gram' ? say(s.altin_gram_tl) : k.birim === 'usd' ? say(s.usdtry) : 0
-    const miktar = k.birim && birimFiyat > 0 ? deger / birimFiyat : null
-    return { tarih: s.tarih, deger, birimFiyat: birimFiyat > 0 ? birimFiyat : null, miktar, akis: say(s.eklenen_cekilen) }
+    const degerTl = say(s[sinif])
+    // Secilen parada deger; USD'de o kaydin kendi kuruyla. Kur yoksa 0 (grafikte bosluk yerine sifir — nadir).
+    const deger = cevir(degerTl, s, para) ?? 0
+    // Birim bilgisi: gram = TL / gram fiyati, USD = TL / kur — kur kayitta varsa. Birim fiyat da secilen parada.
+    const birimFiyatTl = k.birim === 'gram' ? say(s.altin_gram_tl) : k.birim === 'usd' ? say(s.usdtry) : 0
+    const miktar = k.birim && birimFiyatTl > 0 ? degerTl / birimFiyatTl : null
+    const birimFiyat = birimFiyatTl > 0 ? (cevir(birimFiyatTl, s, para) ?? null) : null
+    return { tarih: s.tarih, deger, birimFiyat, miktar, akis: cevir(say(s.eklenen_cekilen), s, para) ?? 0 }
   })
   const son = seri.at(-1)!, onceki = seri.at(-2) ?? null, ilk = seri[0]
   const dOnceki = onceki ? son.deger - onceki.deger : null
@@ -166,26 +173,33 @@ function KalemDetayi({ sinif, sirali, kapat }: { sinif: Sinif; sirali: PortfoyGe
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kutu etiket="Değer" deger={tl(son.deger)} alt={tarihKisa(son.tarih)} />
+        <Kutu etiket="Değer" deger={b(son.deger)} alt={tarihKisa(son.tarih)} />
         <Kutu
           etiket="Önceki kayda göre"
-          deger={dOnceki === null ? '—' : tl(dOnceki)}
+          deger={dOnceki === null ? '—' : b(dOnceki)}
           alt={onceki ? `${tarihKisa(onceki.tarih)} · ${yuzde(oran(son.deger, onceki.deger))}` : 'önceki kayıt yok'}
           renk={dOnceki === null ? undefined : dOnceki >= 0 ? 'var(--artis-iyi)' : 'var(--kritik)'}
         />
         <Kutu
           etiket="İlk kayda göre"
-          deger={dIlk === null ? '—' : tl(dIlk)}
+          deger={dIlk === null ? '—' : b(dIlk)}
           alt={seri.length > 1 ? `${tarihKisa(ilk.tarih)} · ${yuzde(oran(son.deger, ilk.deger))}` : 'tek kayıt'}
           renk={dIlk === null ? undefined : dIlk >= 0 ? 'var(--artis-iyi)' : 'var(--kritik)'}
         />
-        {birimEtiketi && son.miktar !== null ? (
+        {k.birim === 'usd' && para === 'USD' ? (
+          // Dolar modunda hisse ABD'nin "birim fiyati" 1$ olurdu — anlamli olan kurun kendisi ve degisimi.
+          <Kutu
+            etiket="USD/TRY kuru"
+            deger={say(sirali.at(-1)!.usdtry) > 0 ? say(sirali.at(-1)!.usdtry).toLocaleString('tr-TR', { minimumFractionDigits: 2 }) : '—'}
+            alt={(() => { const o = sirali.at(-2); const r = o && say(o.usdtry) > 0 && say(sirali.at(-1)!.usdtry) > 0 ? oran(say(sirali.at(-1)!.usdtry), say(o.usdtry)) : null; return r === null ? 'önceki kayıtta kur yok' : `önceki kayda göre ${yuzde(r)}` })()}
+          />
+        ) : birimEtiketi && son.miktar !== null ? (
           <Kutu
             etiket={k.birim === 'gram' ? 'Miktar · gram fiyatı' : 'Miktar · USD/TRY'}
             deger={`${son.miktar.toLocaleString('tr-TR', { maximumFractionDigits: k.birim === 'gram' ? 3 : 2 })} ${birimEtiketi}`}
             alt={fiyatGetiri === null
-              ? `birim ${tlKurus(son.birimFiyat)}`
-              : `birim ${tlKurus(son.birimFiyat)} · fiyat ${yuzde(fiyatGetiri)}${miktarDegisti ? ' · miktar değişti' : ' · miktar aynı'}`}
+              ? `birim ${bk(son.birimFiyat)}`
+              : `birim ${bk(son.birimFiyat)} · fiyat ${yuzde(fiyatGetiri)}${miktarDegisti ? ' · miktar değişti' : ' · miktar aynı'}`}
             renk={fiyatGetiri === null ? undefined : fiyatGetiri >= 0 ? 'var(--artis-iyi)' : 'var(--kritik)'}
           />
         ) : (
@@ -205,8 +219,8 @@ function KalemDetayi({ sinif, sirali, kapat }: { sinif: Sinif; sirali: PortfoyGe
               </defs>
               <CartesianGrid stroke="var(--grid)" vertical={false} />
               <XAxis dataKey="tarih" tickFormatter={tarihKisa} tick={EKSEN_STILI} tickLine={false} axisLine={{ stroke: 'var(--axis)' }} />
-              <YAxis tickFormatter={eksenTL} tick={EKSEN_STILI} tickLine={false} axisLine={false} width={58} domain={[0, tavan]} />
-              <Tooltip content={<Ipucu donemMi={false} />} labelFormatter={(d) => tarihKisa(String(d))} cursor={{ stroke: 'var(--axis)' }} />
+              <YAxis tickFormatter={para === 'USD' ? eksenUSD : eksenTL} tick={EKSEN_STILI} tickLine={false} axisLine={false} width={58} domain={[0, tavan]} />
+              <Tooltip content={<Ipucu donemMi={false} bicim={bk} />} labelFormatter={(d) => tarihKisa(String(d))} cursor={{ stroke: 'var(--axis)' }} />
               <Area type="monotone" dataKey="deger" name={k.etiket} stroke={r} strokeWidth={2} fill={`url(#dolgu-${sinif})`}
                 dot={{ r: 4, fill: r, stroke: 'var(--surface)', strokeWidth: 2 }} />
             </AreaChart>
@@ -237,12 +251,12 @@ function KalemDetayi({ sinif, sirali, kapat }: { sinif: Sinif; sirali: PortfoyGe
                 <tr key={s.tarih} style={{ borderTop: '1px solid var(--hair)' }}>
                   <td className="rakam py-1">{tarihKisa(s.tarih)}</td>
                   {birimEtiketi && <td className="rakam py-1 text-right">{s.miktar === null ? '—' : `${s.miktar.toLocaleString('tr-TR', { maximumFractionDigits: 3 })} ${birimEtiketi}`}</td>}
-                  {birimEtiketi && <td className="rakam py-1 text-right">{s.birimFiyat === null ? '—' : tlKurus(s.birimFiyat)}</td>}
-                  <td className="rakam py-1 text-right font-medium">{tl(s.deger)}</td>
+                  {birimEtiketi && <td className="rakam py-1 text-right">{s.birimFiyat === null ? '—' : bk(s.birimFiyat)}</td>}
+                  <td className="rakam py-1 text-right font-medium">{b(s.deger)}</td>
                   <td className="rakam py-1 text-right" style={{ color: d === null ? 'var(--ink-muted)' : d >= 0 ? 'var(--artis-iyi)' : 'var(--kritik)' }}>
-                    {d === null ? '—' : `${d >= 0 ? '+' : ''}${tl(d)}`}
+                    {d === null ? '—' : `${d >= 0 ? '+' : ''}${b(d)}`}
                   </td>
-                  <td className="rakam py-1 text-right" style={{ color: 'var(--ink-muted)' }}>{s.akis ? tl(s.akis) : '—'}</td>
+                  <td className="rakam py-1 text-right" style={{ color: 'var(--ink-muted)' }}>{s.akis ? b(s.akis) : '—'}</td>
                 </tr>
               )
             })}
@@ -254,6 +268,7 @@ function KalemDetayi({ sinif, sirali, kapat }: { sinif: Sinif; sirali: PortfoyGe
         Değişim = iki kayıt arasındaki değer farkı. Para giriş/çıkışı yalnızca <em>portföy toplamı</em> için tutuluyor
         (sağ sütun), kalem bazında değil — o yüzden bir kaleme para eklendiyse buradaki artış getiri + katkıdır.
         {birimEtiketi ? ' Bu kalemde miktar ve birim fiyat ayrı görünür: miktar aynıysa "fiyat" yüzdesi saf getiridir.' : ''}
+        {para === 'USD' ? ' Dolar değerleri her kaydın kendi günündeki USD/TRY kuruyla çevrildi.' : ''}
       </p>
     </div>
   )
@@ -269,7 +284,7 @@ function Kutu({ etiket, deger, alt, renk: r }: { etiket: string; deger: string; 
   )
 }
 
-function PastaIpucu({ active, payload, toplam }: { active?: boolean; payload?: { name?: string; value?: number; payload?: { ad?: Sinif } }[]; toplam: number }) {
+function PastaIpucu({ active, payload, toplam, para }: { active?: boolean; payload?: { name?: string; value?: number; payload?: { ad?: Sinif } }[]; toplam: number; para: Para }) {
   if (!active || !payload?.length) return null
   const p = payload[0]
   if (!p.name || p.value === undefined) return null
@@ -279,7 +294,7 @@ function PastaIpucu({ active, payload, toplam }: { active?: boolean; payload?: {
       <div className="flex items-center gap-2 whitespace-nowrap">
         {ad && <span aria-hidden className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: renk(ad) }} />}
         <span style={{ color: 'var(--ink-2)' }}>{p.name}</span>
-        <span className="rakam ml-3 font-medium">{tlKurus(p.value)}</span>
+        <span className="rakam ml-3 font-medium">{bicimleKurus(para)(p.value)}</span>
         <span className="rakam" style={{ color: 'var(--ink-muted)' }}>{yuzde(p.value / toplam)}</span>
       </div>
     </div>

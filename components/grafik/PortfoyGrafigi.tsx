@@ -3,14 +3,15 @@
 import {
   Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
-import { tarihKisa } from '@/lib/bicim'
-import { EKSEN_STILI, Ipucu, eksenTL, ustSinir } from './ortak'
+import { tarihKisa, tlKurus, usdKurus } from '@/lib/bicim'
+import { EKSEN_STILI, Ipucu, eksenTL, eksenUSD, ustSinir } from './ortak'
 
 /** Portfoy toplaminin seyri. Tek seri -> lejant yok, basligi zaten adlandiriyor. */
 export default function PortfoyGrafigi({
-  veri,
+  veri, para = 'TRY',
 }: {
   veri: { tarih: string; toplam: number }[]
+  para?: 'TRY' | 'USD'
 }) {
   if (veri.length < 2) {
     return (
@@ -37,11 +38,11 @@ export default function PortfoyGrafigi({
             tickLine={false} axisLine={{ stroke: 'var(--axis)' }}
           />
           <YAxis
-            tickFormatter={eksenTL} tick={EKSEN_STILI} tickLine={false}
+            tickFormatter={para === 'USD' ? eksenUSD : eksenTL} tick={EKSEN_STILI} tickLine={false}
             axisLine={false} width={58} domain={[0, tavan]}
           />
           <Tooltip
-            content={<Ipucu donemMi={false} />}
+            content={<Ipucu donemMi={false} bicim={para === 'USD' ? usdKurus : tlKurus} />}
             labelFormatter={(d) => tarihKisa(String(d))}
             cursor={{ stroke: 'var(--axis)' }}
           />

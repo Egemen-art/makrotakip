@@ -18,6 +18,13 @@ export const tl = (n: number | string | null | undefined) =>
 export const tlKurus = (n: number | string | null | undefined) =>
   n === null || n === undefined ? '—' : TL_KURUS.format(Number(n))
 
+const USD = new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
+const USD_KURUS = new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+export const usd = (n: number | string | null | undefined) =>
+  n === null || n === undefined ? '—' : USD.format(Number(n))
+export const usdKurus = (n: number | string | null | undefined) =>
+  n === null || n === undefined ? '—' : USD_KURUS.format(Number(n))
+
 export const yuzde = (n: number | null | undefined) =>
   n === null || n === undefined || !isFinite(n)
     ? '—'
