@@ -1,5 +1,6 @@
 import 'server-only'
 import type { Kurlar } from '@/lib/tipler'
+import { sayiOku as sayi } from '@/lib/bicim'
 
 /**
  * Canli piyasa kurlari — yalniz sunucuda calisir.
@@ -26,18 +27,6 @@ async function jsonGetir(url: string): Promise<Ham> {
   })
   if (!r.ok) throw new Error(`${url} -> HTTP ${r.status}`)
   return (await r.json()) as Ham
-}
-
-/** "48,25" · "48.25" · "7.117,60" · 48.25 -> 48.25 */
-function sayi(v: unknown): number | null {
-  if (typeof v === 'number') return isFinite(v) ? v : null
-  if (typeof v !== 'string') return null
-  let s = v.trim().replace(/[^\d.,-]/g, '')
-  if (!s) return null
-  if (s.includes(',') && s.includes('.')) s = s.replace(/\./g, '').replace(',', '.')
-  else if (s.includes(',')) s = s.replace(',', '.')
-  const n = Number(s)
-  return isFinite(n) ? n : null
 }
 
 /** Nesnede adi "alis"/"satis" gibi baslayan anahtari bul (Alış, Alis, Buying...). */
@@ -150,4 +139,33 @@ export async function kurlariGetir(): Promise<Kurlar> {
     kaynak,
     uyarilar,
   }
+}
+
+/* ── Teshis ────────────────────────────────────────────────────────────── */
+
+const KAYNAK_URLLERI: Record<string, string> = {
+  truncgil: 'https://finans.truncgil.com/v4/today.json',
+  erApi: 'https://open.er-api.com/v6/latest/USD',
+  frankfurter: 'https://api.frankfurter.app/latest?from=USD&to=TRY,EUR',
+  goldApi: 'https://api.gold-api.com/price/XAU',
+  goldpriceTry: 'https://data-asg.goldprice.org/dbXRates/TRY',
+}
+
+/** Her kaynagin ham durumu: HTTP kodu, sure, govdenin basi. Sessiz dususleri gormek icin. */
+export async function kaynakTanisi() {
+  const sonuc: Record<string, { ok: boolean; status: number | null; ms: number; tip: string | null; bas: string; hata: string | null }> = {}
+  await Promise.all(Object.entries(KAYNAK_URLLERI).map(async ([ad, url]) => {
+    const t0 = Date.now()
+    try {
+      const r = await fetch(url, {
+        signal: AbortSignal.timeout(ZAMAN_ASIMI_MS), cache: 'no-store',
+        headers: { accept: 'application/json', 'user-agent': 'finans-takip/1.0' },
+      })
+      const govde = await r.text()
+      sonuc[ad] = { ok: r.ok, status: r.status, ms: Date.now() - t0, tip: r.headers.get('content-type'), bas: govde.slice(0, 400), hata: null }
+    } catch (e) {
+      sonuc[ad] = { ok: false, status: null, ms: Date.now() - t0, tip: null, bas: '', hata: e instanceof Error ? `${e.name}: ${e.message}` : String(e) }
+    }
+  }))
+  return sonuc
 }
