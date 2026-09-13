@@ -153,6 +153,32 @@ async function gramAltin(): Promise<Fiyat> {
   }
 }
 
+/**
+ * Belirli bir GUNUN USD/TRY (ya da EUR/TRY) kuru — Yahoo'nun kur serisinden.
+ * Hareketin TL karsiligi bununla hesaplanir: Egemen yalnizca adet ve birim
+ * fiyat yazsin diye. Kur gelmezse null doner; yaklasik kur uydurulmaz.
+ */
+export async function kurTarihli(para: 'USD' | 'EUR', tarih: string): Promise<number | null> {
+  const sembol = para === 'USD' ? 'TRY=X' : 'EURTRY=X'
+  const gun = Date.parse(`${tarih}T00:00:00Z`)
+  if (!Number.isFinite(gun)) return null
+  // Hafta sonu / tatil icin pencere genis tutulur; son kapanis alinir.
+  const bas = Math.floor((gun - 6 * 86_400_000) / 1000)
+  const son = Math.floor((gun + 86_400_000) / 1000)
+  try {
+    const j = JSON.parse(await metin(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${sembol}?period1=${bas}&period2=${son}&interval=1d`,
+    ))
+    const kapanis: (number | null)[] = j?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? []
+    const gecerli = kapanis.filter((k): k is number => typeof k === 'number' && k > 0)
+    if (gecerli.length > 0) return gecerli[gecerli.length - 1]
+    const simdi = Number(j?.chart?.result?.[0]?.meta?.regularMarketPrice)
+    return Number.isFinite(simdi) && simdi > 0 ? simdi : null
+  } catch {
+    return null
+  }
+}
+
 export async function fiyatOku(kaynak: FiyatKaynagi): Promise<Fiyat> {
   switch (kaynak.tur) {
     case 'bist': return yahoo(`${kaynak.sembol}.IS`, 'TRY')

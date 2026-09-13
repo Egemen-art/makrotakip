@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { supabaseSunucu } from '@/lib/supabase/server'
 import { sayiOku, bugun } from '@/lib/bicim'
-import { fiyatOku, type FiyatKaynagi } from '@/lib/fiyatKaynak'
+import { fiyatOku, kurTarihli, type FiyatKaynagi } from '@/lib/fiyatKaynak'
 import {
   HAREKET_TURLERI, KAYNAK_TURLERI, VARLIK_SINIFLARI,
   type KaynakTur, type Varlik, type VarlikSinif,
@@ -68,20 +68,51 @@ export async function hareketEkle(form: FormData): Promise<Sonuc> {
   if (miktar <= 0 && tur !== 'Düzeltme') return { tamam: false, hata: 'Miktar sıfırdan büyük olmalı (eksiltmek için Satım/Çıkış kullan).' }
 
   const sb = await supabaseSunucu()
+  const birimFiyat = sayiOku(form.get('birim_fiyat'))
+  let tutar = sayiOku(form.get('tutar'))
+  let usdtry = sayiOku(form.get('usdtry'))
+  let bilgi: string | undefined
+
+  // TL tutari ELLE ZORUNLU DEGIL: birim fiyat varsa buradan hesaplanir.
+  // Doviz kalemlerinde o GUNUN kuru cekilir (bugunku kurla gecmis cevrilmez).
+  const { data: varlik } = await sb.from('varlik').select('para, kod').eq('id', varlikId).single()
+  const para = (varlik?.para ?? 'TRY') as 'TRY' | 'USD' | 'EUR'
+
+  if (tutar === null && birimFiyat !== null) {
+    if (para === 'TRY') {
+      tutar = Math.round(miktar * birimFiyat * 100) / 100
+      bilgi = `Tutar birim fiyattan hesaplandı: ${tutar.toFixed(2)} ₺`
+    } else {
+      const kur = await kurTarihli(para, tarih)
+      if (kur === null) {
+        bilgi = `${tarih} için ${para}/TRY kuru gelmedi; tutar boş bırakıldı — getiri hesabı bu hareketi saymaz.`
+      } else {
+        tutar = Math.round(miktar * birimFiyat * kur * 100) / 100
+        if (para === 'USD') usdtry = usdtry ?? Math.round(kur * 10000) / 10000
+        bilgi = `Tutar ${para}/TRY ${kur.toFixed(4)} ile hesaplandı: ${tutar.toFixed(2)} ₺`
+      }
+    }
+  }
+  // Dolar bazli getiri icin gunun kuru her zaman kayda dusulsun (karar 43).
+  if (usdtry === null) {
+    const k = await kurTarihli('USD', tarih)
+    if (k !== null) usdtry = Math.round(k * 10000) / 10000
+  }
+
   const { error } = await sb.from('varlik_hareket').insert({
     varlik_id: varlikId,
     tarih,
     tur,
     miktar,
-    birim_fiyat: sayiOku(form.get('birim_fiyat')),
-    tutar: sayiOku(form.get('tutar')),
-    usdtry: sayiOku(form.get('usdtry')),
+    birim_fiyat: birimFiyat,
+    tutar,
+    usdtry,
     kaynak: 'Elle',
     not_: metin(form, 'not_') || null,
   })
   if (error) return { tamam: false, hata: error.message }
   revalidatePath('/portfoy/varliklar')
-  return { tamam: true }
+  return { tamam: true, bilgi }
 }
 
 export async function hareketSil(id: number): Promise<Sonuc> {

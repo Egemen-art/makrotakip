@@ -143,13 +143,15 @@ export default function VarlikYonetimi({
             <input type="date" name="tarih" required defaultValue={bugun()} aria-label="Tarih" className="rounded-lg px-2 py-1.5 text-[13px]" style={kutu} />
             <input name="miktar" required inputMode="decimal" placeholder="Miktar (adet/gram/pay)" aria-label="Miktar" className="rakam rounded-lg px-2 py-1.5 text-[13px]" style={kutu} />
             <input name="birim_fiyat" inputMode="decimal" placeholder="Birim fiyat" aria-label="Birim fiyat" className="rakam rounded-lg px-2 py-1.5 text-[13px]" style={kutu} />
-            <input name="tutar" inputMode="decimal" placeholder="Tutar ₺" aria-label="TL tutarı" className="rakam rounded-lg px-2 py-1.5 text-[13px]" style={{ ...kutu, borderColor: 'var(--uyari)' }} />
+            <input name="tutar" inputMode="decimal" placeholder="Tutar ₺ (boşsa hesaplanır)" aria-label="TL tutarı" className="rakam rounded-lg px-2 py-1.5 text-[13px]" style={kutu} />
             <button type="submit" disabled={bekliyor} className="rounded-lg px-3 py-1.5 text-[13px] font-medium text-white sm:col-span-3 lg:col-span-1" style={{ background: 'var(--seri-1)' }}>
               Ekle
             </button>
             <p className="text-[11px] sm:col-span-3 lg:col-span-5" style={{ color: 'var(--ink-muted)' }}>
-              <strong>Tutar ₺</strong> getiri hesabının akış tarafıdır: bu kaleme koyduğun (ya da
-              çektiğin) para. Boş bırakırsan getiri olduğundan yüksek çıkar.
+              <strong>Birim fiyat</strong> yazarsan <strong>Tutar ₺</strong> kendiliğinden hesaplanır
+              — döviz kalemlerinde o günün kuruyla, bugünkünle değil. Tutar yalnızca <em>getiri</em>
+              için gerekli; <em>değer</em> zaten adet × güncel fiyattan çıkıyor. İkisini de boş
+              bırakırsan kalem değerlenir ama maliyeti bilinmediği için getirisi hesaplanmaz.
             </p>
           </form>
         </div>
@@ -206,7 +208,9 @@ export default function VarlikYonetimi({
                     {yatirilan === 0 ? '—' : tl(yatirilan)}
                   </td>
                   <td className="rakam px-3 py-2 text-right" style={{ color: fark === null ? 'var(--ink-muted)' : fark >= 0 ? 'var(--artis-iyi)' : 'var(--kritik)' }}>
-                    {fark === null ? '—' : `${tl(fark)} · ${yuzde(fark / yatirilan)}`}
+                    {fark === null
+                      ? <span className="text-[11px]">{yatirilan === 0 ? 'maliyet girilmedi' : '—'}</span>
+                      : `${tl(fark)} · ${yuzde(fark / yatirilan)}`}
                   </td>
                   <td className="px-3 py-2 text-right">
                     <button
