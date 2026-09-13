@@ -109,27 +109,46 @@ export function istekler({ bist, abd, fon }: { bist: string; abd: string; fon: s
       url: `https://query1.finance.yahoo.com/v8/finance/chart/${abd}?interval=1d&range=5d`,
       oku: yahooOku,
     },
-    // ── Yatirim fonu (PPF) — Tera'nin site haritasi calisiyor (178 adres) ve
-    // fon sayfalari ".../fonlarimiz/<kategori>/<fon-adi>-<kod>" deseninde.
-    // Adresi tahmin etmek yerine haritadan buluyoruz.
+    // ── Yatirim fonu (PPF) — fon sayfasi bulundu:
+    // .../fonlarimiz/para-piyasasi-fonlarimiz/tera-portfoy-para-piyasasi-tl-fon-tp2
+    // Fiyat duz metinde degil; sayfanin kendi veri ucunu ariyoruz.
     {
-      ad: 'tera_fon_sayfasi', ne: `Tera Portföy — ${fon} fon sayfası (haritadan)`,
-      url: 'https://teraportfoy.com/',
-      haritaUrl: 'https://teraportfoy.com/sitemap.xml',
-      haritaDesen: new RegExp(`-${fon}/?$`, 'i'),
-      oku: etiketliFiyat, kanit: dokum(fon),
-    },
-    {
-      ad: 'tera_fon_sayfasi_www', ne: `Tera Portföy — ${fon} (www site haritası)`,
+      ad: 'tp2_veri_ucu', ne: `${fon} sayfasındaki veri uçları`,
       url: 'https://www.teraportfoy.com/',
       haritaUrl: 'https://www.teraportfoy.com/sitemap.xml',
       haritaDesen: new RegExp(`-${fon}(/|$)`, 'i'),
-      oku: etiketliFiyat, kanit: dokum(fon),
+      oku: () => null,
+      kanit: (g) => {
+        const yollar = [...g.matchAll(/["'`]([^"'`\s]*(?:api|\.json|Fiyat|fiyat|Fon\w*Get)[^"'`\s]{0,90})["'`]/g)]
+          .map((m) => m[1])
+          .filter((u) => /\/|\./.test(u) && !/\.(css|png|jpg|svg|woff|ico)/i.test(u))
+        return `uçlar: ${[...new Set(yollar)].slice(0, 18).join(' | ') || 'yok'}`
+      },
     },
     {
-      ad: 'tera_fon_listesi', ne: 'Tera Portföy — fon listesi sayfası dökümü',
-      url: 'https://www.teraportfoy.com/fonlarimiz',
-      oku: etiketliFiyat, kanit: dokum(fon),
+      ad: 'tp2_fiyat_penceresi', ne: `${fon} sayfasında fiyatın geçtiği yer`,
+      url: 'https://www.teraportfoy.com/',
+      haritaUrl: 'https://www.teraportfoy.com/sitemap.xml',
+      haritaDesen: new RegExp(`-${fon}(/|$)`, 'i'),
+      oku: etiketliFiyat,
+      kanit: (g) => {
+        const duz = g.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ')
+          .replace(/&#x[0-9a-f]+;/gi, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ')
+        const i = duz.search(/Fon Fiyat|Son Fiyat|Pay De[gğ]er/i)
+        return i >= 0 ? duz.slice(Math.max(0, i - 260), i + 340) : duz.slice(0, 600)
+      },
+    },
+    {
+      ad: 'tp2_script', ne: `${fon} sayfasındaki gömülü veri (script)`,
+      url: 'https://www.teraportfoy.com/',
+      haritaUrl: 'https://www.teraportfoy.com/sitemap.xml',
+      haritaDesen: new RegExp(`-${fon}(/|$)`, 'i'),
+      oku: () => null,
+      kanit: (g) => {
+        const m = g.match(/[0-9]+[.,][0-9]{4,6}/g) ?? []
+        const j = g.search(/fiyat["'\s:]*[0-9]/i)
+        return `4+ ondalıklı sayılar: ${[...new Set(m)].slice(0, 12).join(', ') || 'yok'} · ${j >= 0 ? g.slice(Math.max(0, j - 120), j + 200).replace(/\s+/g, ' ') : 'fiyat:sayı deseni yok'}`
+      },
     },
   ]
 }
