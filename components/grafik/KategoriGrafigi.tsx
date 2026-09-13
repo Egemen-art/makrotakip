@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer,
+  Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Pie, PieChart, ResponsiveContainer,
   Tooltip, XAxis, YAxis,
 } from 'recharts'
 import type { AylikKategori, KategoriSerisi, Yon } from '@/lib/tipler'
@@ -354,6 +354,8 @@ const PASTA_ARALIKLARI: { deger: PastaAralik; ad: string }[] = [
 const DIGER = 'Diğer'
 /** Pasta en fazla 6 dilim: 5 kategori + Diger. Daha fazlasi okunmaz. */
 const EN_FAZLA_DILIM = 5
+/** Kirilimin altindaki seyir grafigi: secili ayda biten 12 ay. */
+const SEYIR_AY = 12
 
 type Dilim = { ad: string; toplam: number }
 
@@ -401,6 +403,71 @@ function altKirilim(kayitlar: AylikKategori[], yon: Yon, kategori: string, aylar
     .map(([ad, toplam]) => ({ ad: ad === '—' ? '(alt kategori yok)' : ad, toplam }))
 }
 
+/** Ay ekseni: 'Eyl' — yil yalnizca Ocak'ta ('Oca 2026'), 12 etiket sigsin diye. */
+const ayKisa = (donem: string) =>
+  donem.slice(5) === '01' ? donemEtiket(donem) : donemEtiket(donem).split(' ')[0]
+
+/** Secili kategorilerin (Diger icin katlananlarin) ay ay toplami — secili ayda biten 12 ay. */
+function aylikSeyir(kayitlar: KategoriSerisi[], yon: Yon, adlar: string[], seciliAy: string) {
+  const kume = new Set(adlar)
+  const aylar = [...new Set(kayitlar.filter((k) => k.yon === yon && k.donem <= seciliAy).map((k) => k.donem))]
+    .sort()
+    .slice(-SEYIR_AY)
+  const t = new Map<string, number>()
+  for (const k of kayitlar) {
+    if (k.yon !== yon || !kume.has(k.kategori)) continue
+    t.set(k.donem, (t.get(k.donem) ?? 0) + Number(k.toplam))
+  }
+  // Kaydi olmayan ay 0 olarak durur: "o ay harcamadim" da bir bilgidir.
+  return aylar.map((donem) => ({ donem, toplam: t.get(donem) ?? 0 }))
+}
+
+/** Kirilimin altindaki ay ay seyir. Her cubugun uzerinde tutari yazar. */
+function AylikSeyirGrafigi({ veri, ad, renk }: { veri: { donem: string; toplam: number }[]; ad: string; renk: string }) {
+  const enBuyuk = Math.max(0, ...veri.map((v) => v.toplam))
+  if (veri.length === 0 || enBuyuk === 0) return null
+  return (
+    <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--hair)' }}>
+      <p className="mb-1 text-[12px]" style={{ color: 'var(--ink-2)' }}>
+        <span aria-hidden className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle" style={{ background: renk }} />
+        {ad} · son {veri.length} ay
+      </p>
+      {/* 12 etiketli cubuk dar ekrana sigmaz: kirpmak yerine yatay kaydirilir. */}
+      <div className="overflow-x-auto">
+        <div className="h-[190px] min-w-[520px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={veri} margin={{ top: 18, right: 4, bottom: 0, left: 4 }}>
+            <XAxis
+              dataKey="donem"
+              tickFormatter={ayKisa}
+              tick={EKSEN_STILI}
+              tickLine={false}
+              axisLine={{ stroke: 'var(--axis)' }}
+              interval={0}
+            />
+            {/* Deger her cubugun uzerinde yazili; ikinci bir sayi sutunu gereksiz.
+                Eksen gizli oldugu icin tavan yuvarlanmaz — cubuklar alani doldurur. */}
+            <YAxis hide domain={[0, enBuyuk * 1.18]} />
+            <Tooltip content={<Ipucu />} cursor={{ fill: 'var(--grid)', opacity: 0.45 }} />
+            <Bar dataKey="toplam" name={ad} fill={renk} radius={[4, 4, 0, 0]} maxBarSize={34} isAnimationActive={false}>
+              <LabelList
+                dataKey="toplam"
+                position="top"
+                offset={6}
+                fontSize={10}
+                fill="var(--ink-2)"
+                className="rakam"
+                formatter={(v) => (typeof v === 'number' && v > 0 ? eksenTL(v) : '')}
+              />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function PastaGorunumu({
   kayitlar, yon, seciliAy, kayit, altKategoriler,
 }: {
@@ -437,11 +504,23 @@ function PastaGorunumu({
   const { dilimler, toplam, aylar, katlanan, katlananlar } = hesap
   const kirilim = useMemo(() => {
     if (!secili) return null
-    if (secili === DIGER) return { baslik: 'Diğer · katlanan kategoriler', satirlar: katlananlar, payda: toplam }
+    if (secili === DIGER) {
+      return {
+        baslik: 'Diğer · katlanan kategoriler',
+        satirlar: katlananlar,
+        payda: toplam,
+        seyirAdlari: katlananlar.map((d) => d.ad),
+      }
+    }
     const satirlar = altKirilim(altKategoriler, yon, secili, aylar)
     const kategoriToplami = dilimler.find((d) => d.ad === secili)?.toplam ?? 0
-    return { baslik: `${secili} · alt kategoriler`, satirlar, payda: kategoriToplami }
+    return { baslik: `${secili} · alt kategoriler`, satirlar, payda: kategoriToplami, seyirAdlari: [secili] }
   }, [secili, katlananlar, toplam, altKategoriler, yon, aylar, dilimler])
+  // Seyir pasta penceresinden bagimsizdir: her zaman secili ayda biten 12 ay.
+  const seyir = useMemo(
+    () => (kirilim ? aylikSeyir(kayitlar, yon, kirilim.seyirAdlari, seciliAy) : []),
+    [kirilim, kayitlar, yon, seciliAy],
+  )
   const ilk = aylar[0]
   const son = aylar.at(-1)
   const pencereEtiketi =
@@ -577,6 +656,8 @@ function PastaGorunumu({
               })}
             </ul>
           )}
+
+          <AylikSeyirGrafigi veri={seyir} ad={secili!} renk={renk(secili!)} />
         </div>
       )}
     </div>
