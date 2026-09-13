@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import type { PortfoyBugun, PortfoySinif } from '@/lib/tipler-varlik'
-import { SINIF_ETIKETI } from '@/lib/tipler-varlik'
+import { GRUP_ETIKETI, SINIF_ETIKETI, SINIF_GRUBU } from '@/lib/tipler-varlik'
 import { tarihKisa, tl, yuzde } from '@/lib/bicim'
 
 /**
@@ -16,7 +16,22 @@ export default function BugunkuPortfoy({
   siniflar: PortfoySinif[]
 }) {
   const toplam = Number(ozet.toplam_tl ?? 0)
-  const sirali = [...siniflar].sort((a, b) => Number(b.deger_tl ?? 0) - Number(a.deger_tl ?? 0))
+
+  // Once ust grup (Altin, Hisse...), altinda kategoriler. Tek kategorili
+  // grupta alt satir tekrar olur, gosterilmez.
+  const gruplar = new Map<string, PortfoySinif[]>()
+  for (const s of siniflar) {
+    const g = SINIF_GRUBU[s.sinif] ?? 'diger'
+    gruplar.set(g, [...(gruplar.get(g) ?? []), s])
+  }
+  const sirali = [...gruplar.entries()]
+    .map(([grup, uyeler]) => ({
+      grup,
+      uyeler: [...uyeler].sort((a, b) => Number(b.deger_tl ?? 0) - Number(a.deger_tl ?? 0)),
+      deger: uyeler.reduce((t, u) => t + Number(u.deger_tl ?? 0), 0),
+      olculdu: uyeler.some((u) => u.deger_tl !== null),
+    }))
+    .sort((a, b) => b.deger - a.deger)
 
   return (
     <div className="kart p-4">
@@ -39,31 +54,48 @@ export default function BugunkuPortfoy({
       )}
 
       <ul className="mt-3">
-        {sirali.map((s) => {
-          // Fiyati okunamayan sinif ₺0 gibi gorunmesin: "fiyat yok" yazar.
-          const olculdu = s.deger_tl !== null
-          const deger = Number(s.deger_tl ?? 0)
-          return (
-            <li key={s.sinif} className="grid grid-cols-[minmax(90px,1fr)_auto_auto] items-center gap-x-3 py-1 text-[12px] sm:grid-cols-[minmax(140px,1fr)_minmax(80px,2fr)_auto_auto]">
-              <span className="truncate">{SINIF_ETIKETI[s.sinif] ?? s.sinif}</span>
+        {sirali.map((g) => (
+          <li key={g.grup}>
+            <div className="grid grid-cols-[minmax(90px,1fr)_auto_auto] items-center gap-x-3 py-1 text-[12px] sm:grid-cols-[minmax(140px,1fr)_minmax(80px,2fr)_auto_auto]">
+              <span className="truncate font-medium">{GRUP_ETIKETI[g.grup] ?? g.grup}</span>
               <span className="hidden h-2 overflow-hidden rounded-full sm:block" style={{ background: 'var(--grid)' }} aria-hidden>
                 <span
                   className="block h-full rounded-full"
                   style={{
-                    width: `${olculdu && toplam > 0 ? Math.max(2, (deger / toplam) * 100) : 0}%`,
+                    width: `${g.olculdu && toplam > 0 ? Math.max(2, (g.deger / toplam) * 100) : 0}%`,
                     background: 'var(--seri-1)',
                   }}
                 />
               </span>
-              <span className="rakam text-right font-medium" style={{ color: olculdu ? undefined : 'var(--ciddi)' }}>
-                {olculdu ? tl(deger) : 'fiyat yok'}
+              <span className="rakam text-right font-medium" style={{ color: g.olculdu ? undefined : 'var(--ciddi)' }}>
+                {g.olculdu ? tl(g.deger) : 'fiyat yok'}
               </span>
               <span className="rakam w-12 text-right" style={{ color: 'var(--ink-muted)' }}>
-                {olculdu && toplam > 0 ? yuzde(deger / toplam) : '—'}
+                {g.olculdu && toplam > 0 ? yuzde(g.deger / toplam) : '—'}
               </span>
-            </li>
-          )
-        })}
+            </div>
+
+            {/* Grup birden fazla kategori tasiyorsa kirilimi da goster. */}
+            {g.uyeler.length > 1 && g.uyeler.map((u) => {
+              const olculdu = u.deger_tl !== null
+              const deger = Number(u.deger_tl ?? 0)
+              return (
+                <div
+                  key={u.sinif}
+                  className="grid grid-cols-[minmax(90px,1fr)_auto_auto] items-center gap-x-3 py-0.5 pl-3 text-[11px] sm:grid-cols-[minmax(140px,1fr)_minmax(80px,2fr)_auto_auto]"
+                  style={{ color: 'var(--ink-muted)' }}
+                >
+                  <span className="truncate">{SINIF_ETIKETI[u.sinif] ?? u.sinif}</span>
+                  <span aria-hidden />
+                  <span className="rakam text-right">{olculdu ? tl(deger) : 'fiyat yok'}</span>
+                  <span className="rakam w-12 text-right">
+                    {olculdu && toplam > 0 ? yuzde(deger / toplam) : '—'}
+                  </span>
+                </div>
+              )
+            })}
+          </li>
+        ))}
       </ul>
 
       <Link href="/portfoy/varliklar" className="mt-2 inline-block text-[12px] font-medium" style={{ color: 'var(--seri-1)' }}>

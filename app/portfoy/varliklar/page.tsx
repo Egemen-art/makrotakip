@@ -1,19 +1,20 @@
 import Link from 'next/link'
 import { supabaseSunucu } from '@/lib/supabase/server'
-import type { Varlik, VarlikDeger, VarlikHareket } from '@/lib/tipler-varlik'
+import type { Varlik, VarlikDeger, VarlikGetiri, VarlikHareket } from '@/lib/tipler-varlik'
 import VarlikYonetimi from './VarlikYonetimi'
 
 export const dynamic = 'force-dynamic'
 
 export default async function VarliklarSayfasi() {
   const sb = await supabaseSunucu()
-  const [varliklar, degerler, hareketler] = await Promise.all([
+  const [varliklar, degerler, hareketler, getiriler] = await Promise.all([
     sb.from('varlik').select('*').order('sinif').order('kod'),
     sb.from('v_varlik_deger').select('*'),
     sb.from('varlik_hareket').select('*').order('tarih', { ascending: false }).order('id', { ascending: false }).limit(50),
+    sb.from('v_varlik_getiri').select('*'),
   ])
 
-  const hata = [varliklar.error, degerler.error, hareketler.error].find(Boolean)
+  const hata = [varliklar.error, degerler.error, hareketler.error, getiriler.error].find(Boolean)
 
   return (
     <>
@@ -38,6 +39,7 @@ export default async function VarliklarSayfasi() {
         varliklar={(varliklar.data ?? []) as Varlik[]}
         degerler={(degerler.data ?? []) as VarlikDeger[]}
         hareketler={(hareketler.data ?? []) as VarlikHareket[]}
+        getiriler={(getiriler.data ?? []) as VarlikGetiri[]}
       />
     </>
   )

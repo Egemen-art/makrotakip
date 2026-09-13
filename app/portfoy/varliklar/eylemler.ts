@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { supabaseSunucu } from '@/lib/supabase/server'
 import { sayiOku, bugun } from '@/lib/bicim'
-import { fiyatOku, kurTarihli, type FiyatKaynagi } from '@/lib/fiyatKaynak'
+import { fiyatGecmisi, fiyatOku, kurTarihli, type FiyatKaynagi } from '@/lib/fiyatKaynak'
 import {
   HAREKET_TURLERI, KAYNAK_TURLERI, VARLIK_SINIFLARI,
   type KaynakTur, type Varlik, type VarlikSinif,
@@ -176,6 +176,54 @@ export async function elleFiyat(form: FormData): Promise<Sonuc> {
  * Okunamayan kalem ATLANIR ve raporlanir — eski fiyat bugunun fiyatiymis gibi
  * kopyalanmaz, uydurma rakam yazilmaz.
  */
+/** Varlik satirini fiyat kaynagina cevirir — gunluk okuma ve gecmis ayni esleme. */
+function varligaKaynak(v: Varlik): FiyatKaynagi {
+  switch (v.kaynak_tur) {
+    case 'bist': return { tur: 'bist', sembol: v.kaynak_sembol ?? v.kod }
+    case 'abd': return { tur: 'abd', sembol: v.kaynak_sembol ?? v.kod }
+    case 'fon': return { tur: 'fon', kod: v.kaynak_sembol ?? v.kod, kurucu: 'tera' }
+    case 'nakit': return { tur: 'nakit' }
+    default: return { tur: 'gram_altin' }
+  }
+}
+
+/**
+ * Kalem bazinda performans olcebilmek icin GECMIS fiyatlari doldurur.
+ * Yalniz Yahoo serisi olan kalemler (BIST/ABD); fon, gram altin ve nakit
+ * icin gecmis yoktur, onlar bugunden itibaren birikir.
+ */
+export async function gecmisiCek(): Promise<Sonuc> {
+  const sb = await supabaseSunucu()
+  const { data, error } = await sb.from('varlik').select('*').eq('aktif', true)
+  if (error) return { tamam: false, hata: error.message }
+
+  const varliklar = ((data ?? []) as Varlik[]).filter((v) => v.kaynak_tur === 'bist' || v.kaynak_tur === 'abd')
+  if (varliklar.length === 0) return { tamam: true, bilgi: 'Geçmiş serisi olan kalem yok.' }
+
+  const raporlar: string[] = []
+  for (const v of varliklar) {
+    const { satirlar, para, hata } = await fiyatGecmisi(varligaKaynak(v), '1y')
+    if (hata || satirlar.length === 0 || para === null) {
+      raporlar.push(`${v.kod}: ${hata ?? 'seri yok'}`)
+      continue
+    }
+    // Elle/olculmus mevcut kayitlarin ustune yazilir: kaynak ayni, deger ayni.
+    const { error: yazmaHatasi } = await sb.from('fiyat').upsert(
+      satirlar.map((r) => ({
+        varlik_id: v.id, tarih: r.tarih, fiyat: r.fiyat, para,
+        kaynak: `Yahoo geçmiş · ${v.kaynak_sembol ?? v.kod}`, olculdu: true,
+      })),
+      { onConflict: 'varlik_id,tarih' },
+    )
+    if (yazmaHatasi) raporlar.push(`${v.kod}: ${yazmaHatasi.message}`)
+    else raporlar.push(`${v.kod}: ${satirlar.length} gün`)
+  }
+
+  revalidatePath('/portfoy/varliklar')
+  revalidatePath('/portfoy')
+  return { tamam: true, bilgi: raporlar.join(' · ') }
+}
+
 export async function fiyatlariGuncelle(): Promise<Sonuc> {
   const sb = await supabaseSunucu()
   const { data, error } = await sb.from('varlik').select('*').eq('aktif', true)
@@ -184,14 +232,10 @@ export async function fiyatlariGuncelle(): Promise<Sonuc> {
   const varliklar = ((data ?? []) as Varlik[]).filter((v) => v.kaynak_tur !== 'elle')
   if (varliklar.length === 0) return { tamam: true, bilgi: 'Kaynağı olan varlık yok.' }
 
-  const okumalar = await Promise.all(varliklar.map(async (v) => {
-    const kaynak: FiyatKaynagi =
-      v.kaynak_tur === 'bist' ? { tur: 'bist', sembol: v.kaynak_sembol ?? v.kod }
-      : v.kaynak_tur === 'abd' ? { tur: 'abd', sembol: v.kaynak_sembol ?? v.kod }
-      : v.kaynak_tur === 'fon' ? { tur: 'fon', kod: v.kaynak_sembol ?? v.kod, kurucu: 'tera' }
-      : { tur: 'gram_altin' }
-    return { varlik: v, okuma: await fiyatOku(kaynak) }
-  }))
+  const okumalar = await Promise.all(varliklar.map(async (v) => ({
+    varlik: v,
+    okuma: await fiyatOku(varligaKaynak(v)),
+  })))
 
   const yazilacak = okumalar
     .filter((o) => o.okuma.fiyat !== null && o.okuma.para !== null)

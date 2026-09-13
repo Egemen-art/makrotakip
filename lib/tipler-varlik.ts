@@ -13,18 +13,34 @@ export const SINIF_ETIKETI: Record<VarlikSinif, string> = {
 }
 
 /** Fiyat nereden okunur. 'elle' = kaynak yok, değeri Egemen girer. */
-export const KAYNAK_TURLERI = ['bist', 'abd', 'fon', 'gram_altin', 'elle'] as const
+export const KAYNAK_TURLERI = ['bist', 'abd', 'fon', 'gram_altin', 'nakit', 'elle'] as const
 export type KaynakTur = (typeof KAYNAK_TURLERI)[number]
 
 export const KAYNAK_ETIKETI: Record<KaynakTur, string> = {
   bist: 'BİST · Yahoo', abd: 'ABD · Yahoo', fon: 'Fon · kurucu sayfası',
-  gram_altin: 'Gram altın · /api/kur', elle: 'Elle',
+  gram_altin: 'Gram altın · /api/kur', nakit: 'Nakit · YK + elde', elle: 'Elle',
 }
 
 /** Her sınıf için makul varsayılan kaynak — formda ön seçim. */
 export const SINIF_KAYNAGI: Record<VarlikSinif, KaynakTur> = {
   hisse_bist: 'bist', hisse_abd: 'abd', fon: 'fon', altin_fiziksel: 'gram_altin',
-  altin_etf: 'bist', mevduat: 'elle', bes: 'elle', nakit: 'elle', diger: 'elle',
+  altin_etf: 'bist', mevduat: 'elle', bes: 'elle', nakit: 'nakit', diger: 'elle',
+}
+
+/**
+ * Ust grup: ekranda once grup, altinda kategoriler gorunur.
+ * Altin fizikseli de ETF'i de altindir — biri gramla, digeri ABD borsasinda
+ * fiyatlanir; sinif ile fiyat kaynagi ayri seylerdir.
+ */
+export const SINIF_GRUBU: Record<VarlikSinif, string> = {
+  hisse_bist: 'hisse', hisse_abd: 'hisse',
+  altin_fiziksel: 'altin', altin_etf: 'altin',
+  fon: 'fon', mevduat: 'mevduat', bes: 'bes', nakit: 'nakit', diger: 'diger',
+}
+
+export const GRUP_ETIKETI: Record<string, string> = {
+  hisse: 'Hisse', altin: 'Altın', fon: 'Yatırım fonu', mevduat: 'Vadeli mevduat',
+  bes: 'BES', nakit: 'Nakit', diger: 'Diğer',
 }
 
 export const HAREKET_TURLERI = ['Alım', 'Satım', 'Giriş', 'Çıkış', 'Temettü', 'Düzeltme'] as const
@@ -88,4 +104,18 @@ export type PortfoySinif = {
   yatirilan_tl: string
   kalem: number
   fiyatsiz: number
+}
+
+/** v_varlik_getiri — kalem bazinda birim fiyat degisimi. */
+export type VarlikGetiri = {
+  varlik_id: number
+  fiyat_tarihi: string | null
+  son_fiyat: string | null
+  para: 'TRY' | 'USD' | 'EUR' | null
+  gun_yuzde: string | null
+  hafta_yuzde: string | null
+  ay_yuzde: string | null
+  uc_ay_yuzde: string | null
+  yil_yuzde: string | null
+  ilk_fiyat_tarihi: string | null
 }

@@ -21,6 +21,7 @@ export type FiyatKaynagi =
   | { tur: 'abd'; sembol: string }
   | { tur: 'fon'; kod: string; kurucu: 'tera' }
   | { tur: 'gram_altin' }
+  | { tur: 'nakit' }
 
 export type Fiyat = {
   /** Birim fiyat; okunamadiysa null. */
@@ -179,11 +180,63 @@ export async function kurTarihli(para: 'USD' | 'EUR', tarih: string): Promise<nu
   }
 }
 
+/** Nakit: karar 49'un formulu zaten finans.v_nakit'te; oradan okunur. */
+async function nakit(): Promise<Fiyat> {
+  const { supabaseSunucu } = await import('@/lib/supabase/server')
+  const sb = await supabaseSunucu()
+  const { data, error } = await sb.from('v_nakit').select('toplam, yk_tarih').limit(1).single()
+  if (error || !data) {
+    return { fiyat: null, para: null, tarih: null, kaynak: 'v_nakit', hata: error?.message ?? 'nakit okunamadı' }
+  }
+  const toplam = Number(data.toplam)
+  return {
+    fiyat: Number.isFinite(toplam) ? toplam : null,
+    para: 'TRY',
+    // YK bakiyesinin tarihi degil BUGUN: eldeki nakit bugune ait.
+    tarih: null,
+    kaynak: 'v_nakit · YK + elde (karar 49)',
+    hata: Number.isFinite(toplam) ? null : 'nakit sayiya çevrilemedi',
+  }
+}
+
 export async function fiyatOku(kaynak: FiyatKaynagi): Promise<Fiyat> {
   switch (kaynak.tur) {
     case 'bist': return yahoo(`${kaynak.sembol}.IS`, 'TRY')
     case 'abd': return yahoo(kaynak.sembol, 'USD')
     case 'fon': return teraFon(kaynak.kod)
     case 'gram_altin': return gramAltin()
+    case 'nakit': return nakit()
+  }
+}
+
+/**
+ * Gunluk fiyat GECMISI — kalem bazinda performans olcebilmek icin.
+ * Yahoo'nun kendi serisi kullanilir; ara gunler uydurulmaz, kaynakta ne
+ * varsa o yazilir (borsa tatilinde gun yoktur, olmasi da gerekmez).
+ */
+export async function fiyatGecmisi(
+  kaynak: FiyatKaynagi,
+  aralik: '1mo' | '3mo' | '6mo' | '1y' | '2y' = '1y',
+): Promise<{ satirlar: { tarih: string; fiyat: number }[]; para: 'TRY' | 'USD' | null; hata: string | null }> {
+  if (kaynak.tur !== 'bist' && kaynak.tur !== 'abd') {
+    return { satirlar: [], para: null, hata: 'bu kaynakta geçmiş serisi yok' }
+  }
+  const sembol = kaynak.tur === 'bist' ? `${kaynak.sembol}.IS` : kaynak.sembol
+  try {
+    const j = JSON.parse(await metin(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sembol)}?interval=1d&range=${aralik}`,
+    ))
+    const sonuc = j?.chart?.result?.[0]
+    const zamanlar: number[] = sonuc?.timestamp ?? []
+    const kapanis: (number | null)[] = sonuc?.indicators?.quote?.[0]?.close ?? []
+    const para = sonuc?.meta?.currency === 'TRY' || sonuc?.meta?.currency === 'USD' ? sonuc.meta.currency : null
+
+    const satirlar = zamanlar
+      .map((z, i) => ({ tarih: new Date(z * 1000).toISOString().slice(0, 10), fiyat: kapanis[i] }))
+      .filter((r): r is { tarih: string; fiyat: number } => typeof r.fiyat === 'number' && r.fiyat > 0)
+
+    return { satirlar, para, hata: satirlar.length ? null : 'seri boş geldi' }
+  } catch (e) {
+    return { satirlar: [], para: null, hata: e instanceof Error ? e.message : String(e) }
   }
 }

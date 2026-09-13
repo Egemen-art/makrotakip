@@ -4,9 +4,10 @@ import { useState, useTransition } from 'react'
 import { bugun, tarihKisa, tl, yuzde } from '@/lib/bicim'
 import {
   HAREKET_TURLERI, KAYNAK_ETIKETI, KAYNAK_TURLERI, SINIF_ETIKETI, SINIF_KAYNAGI,
-  VARLIK_SINIFLARI, type KaynakTur, type Varlik, type VarlikDeger, type VarlikHareket, type VarlikSinif,
+  VARLIK_SINIFLARI, type KaynakTur, type Varlik, type VarlikDeger, type VarlikGetiri,
+  type VarlikHareket, type VarlikSinif,
 } from '@/lib/tipler-varlik'
-import { elleFiyat, fiyatlariGuncelle, hareketEkle, hareketSil, varlikEkle, varlikSil } from './eylemler'
+import { elleFiyat, fiyatlariGuncelle, gecmisiCek, hareketEkle, hareketSil, varlikEkle, varlikSil } from './eylemler'
 
 const kutu: React.CSSProperties = {
   background: 'var(--surface)', border: '1px solid var(--hair)', color: 'var(--ink)',
@@ -26,12 +27,25 @@ function fiyatBicim(n: number, para: 'TRY' | 'USD' | 'EUR' | null) {
   return `${sembol}${new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: basamak }).format(n)}`
 }
 
+/** Donem getirisi: isaretiyle ve rengiyle. Yeterli gecmis yoksa bos kalir. */
+function Yuzde({ deger }: { deger: string | null }) {
+  if (deger === null) return <span style={{ color: 'var(--ink-muted)' }}>—</span>
+  const n = Number(deger)
+  if (!Number.isFinite(n)) return <span style={{ color: 'var(--ink-muted)' }}>—</span>
+  return (
+    <span style={{ color: n > 0 ? 'var(--artis-iyi)' : n < 0 ? 'var(--kritik)' : 'var(--ink-muted)' }}>
+      {n > 0 ? '+' : ''}{new Intl.NumberFormat('tr-TR', { maximumFractionDigits: 1 }).format(n)}
+    </span>
+  )
+}
+
 export default function VarlikYonetimi({
-  varliklar, degerler, hareketler,
+  varliklar, degerler, hareketler, getiriler,
 }: {
   varliklar: Varlik[]
   degerler: VarlikDeger[]
   hareketler: VarlikHareket[]
+  getiriler: VarlikGetiri[]
 }) {
   const [hata, setHata] = useState<string | null>(null)
   const [bilgi, setBilgi] = useState<string | null>(null)
@@ -53,6 +67,7 @@ export default function VarlikYonetimi({
   function sinifDegistir(s: VarlikSinif) { setSinif(s); setKaynakTur(SINIF_KAYNAGI[s]) }
 
   const adlar = new Map(varliklar.map((v) => [v.id, v]))
+  const getiriHaritasi = new Map(getiriler.map((g) => [g.varlik_id, g]))
   const toplam = degerler.reduce((t, d) => t + Number(d.deger_tl ?? 0), 0)
   const eksikFiyat = degerler.filter((d) => Number(d.miktar) !== 0 && d.deger_tl === null)
   const elleOlanlar = varliklar.filter((v) => v.kaynak_tur === 'elle' && v.aktif)
@@ -67,6 +82,15 @@ export default function VarlikYonetimi({
           style={{ background: 'var(--seri-1)', opacity: bekliyor ? 0.6 : 1 }}
         >
           {bekliyor ? 'Çalışıyor…' : 'Fiyatları güncelle'}
+        </button>
+        <button
+          type="button" disabled={bekliyor}
+          onClick={() => calistir(gecmisiCek)}
+          className="rounded-lg px-3 py-1.5 text-[13px]"
+          style={{ border: '1px solid var(--hair)', color: 'var(--ink-2)' }}
+          title="Hisseler için bir yıllık günlük fiyat geçmişini Yahoo'dan doldurur"
+        >
+          Geçmişi çek
         </button>
         <button
           type="button"
@@ -177,21 +201,24 @@ export default function VarlikYonetimi({
 
       {/* ── Güncel değer ─────────────────────────────────────────────── */}
       <div className="kart mt-4 overflow-x-auto">
-        <table className="w-full min-w-[640px] text-[13px]">
+        <table className="w-full min-w-[880px] text-[13px]">
           <thead>
             <tr style={{ color: 'var(--ink-muted)', borderBottom: '1px solid var(--hair)' }}>
               <th className="px-3 py-2 text-left font-normal">Varlık</th>
               <th className="px-3 py-2 text-right font-normal">Miktar</th>
               <th className="px-3 py-2 text-right font-normal">Birim fiyat</th>
               <th className="px-3 py-2 text-right font-normal">Değer ₺</th>
-              <th className="px-3 py-2 text-right font-normal">Yatırılan ₺</th>
-              <th className="px-3 py-2 text-right font-normal">Fark</th>
+              <th className="px-3 py-2 text-right font-normal">Gün %</th>
+              <th className="px-3 py-2 text-right font-normal">Hafta %</th>
+              <th className="px-3 py-2 text-right font-normal">Ay %</th>
+              <th className="px-3 py-2 text-right font-normal">Yıl %</th>
+              <th className="px-3 py-2 text-right font-normal">Maliyete göre</th>
               <th className="px-3 py-2" />
             </tr>
           </thead>
           <tbody>
             {degerler.length === 0 && (
-              <tr><td colSpan={7} className="px-3 py-6 text-center" style={{ color: 'var(--ink-muted)' }}>
+              <tr><td colSpan={10} className="px-3 py-6 text-center" style={{ color: 'var(--ink-muted)' }}>
                 Henüz varlık yok. &quot;+ Varlık&quot; ile başla.
               </td></tr>
             )}
@@ -200,6 +227,7 @@ export default function VarlikYonetimi({
               const yatirilan = Number(d.net_yatirilan_tl)
               const fark = deger !== null && yatirilan !== 0 ? deger - yatirilan : null
               const v = adlar.get(d.varlik_id)
+              const g = getiriHaritasi.get(d.varlik_id)
               return (
                 <tr key={d.varlik_id} style={{ borderBottom: '1px solid var(--hair)' }}>
                   <td className="px-3 py-2">
@@ -210,7 +238,7 @@ export default function VarlikYonetimi({
                     )}
                   </td>
                   <td className="rakam px-3 py-2 text-right">
-                    {v?.kaynak_tur === 'elle'
+                    {v?.kaynak_tur === 'elle' || v?.kaynak_tur === 'nakit'
                       ? <span style={{ color: 'var(--ink-muted)' }}>—</span>
                       : miktarBicim(Number(d.miktar))}
                   </td>
@@ -226,9 +254,10 @@ export default function VarlikYonetimi({
                   <td className="rakam px-3 py-2 text-right font-medium">
                     {deger === null ? <span style={{ color: 'var(--ciddi)' }}>fiyat yok</span> : tl(deger)}
                   </td>
-                  <td className="rakam px-3 py-2 text-right" style={{ color: 'var(--ink-muted)' }}>
-                    {yatirilan === 0 ? '—' : tl(yatirilan)}
-                  </td>
+                  <td className="rakam px-3 py-2 text-right"><Yuzde deger={g?.gun_yuzde ?? null} /></td>
+                  <td className="rakam px-3 py-2 text-right"><Yuzde deger={g?.hafta_yuzde ?? null} /></td>
+                  <td className="rakam px-3 py-2 text-right"><Yuzde deger={g?.ay_yuzde ?? null} /></td>
+                  <td className="rakam px-3 py-2 text-right"><Yuzde deger={g?.yil_yuzde ?? null} /></td>
                   <td className="rakam px-3 py-2 text-right" style={{ color: fark === null ? 'var(--ink-muted)' : fark >= 0 ? 'var(--artis-iyi)' : 'var(--kritik)' }}>
                     {fark === null
                       ? <span className="text-[11px]">{yatirilan === 0 ? 'maliyet girilmedi' : '—'}</span>
@@ -253,12 +282,19 @@ export default function VarlikYonetimi({
                 <td className="px-3 py-2 text-[12px]" style={{ color: 'var(--ink-2)' }}>Toplam</td>
                 <td colSpan={2} />
                 <td className="rakam px-3 py-2 text-right text-[15px] font-semibold">{tl(toplam)}</td>
-                <td colSpan={3} />
+                <td colSpan={6} />
               </tr>
             </tfoot>
           )}
         </table>
       </div>
+
+      <p className="mt-2 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+        Yüzdeler <strong>birim fiyatın</strong> değişimidir; adet sabitse kalemin saf getirisi
+        budur. &quot;Maliyete göre&quot; sütunu senin yatırdığın paraya kıyaslar, maliyet
+        girmediysen boş kalır. Yeterli geçmişi olmayan kalemde dönem boş görünür — hisseler için
+        &quot;Geçmişi çek&quot; bir yıllık seriyi doldurur; fon, altın ve nakit bugünden itibaren birikir.
+      </p>
 
       {eksikFiyat.length > 0 && (
         <p className="mt-2 text-[12px]" style={{ color: 'var(--ciddi)' }}>
