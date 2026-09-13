@@ -49,20 +49,12 @@ function yahooOku(govde: string): number | null {
   } catch { return null }
 }
 
-/** TEFAS BindHistoryInfo: data[].FIYAT */
-function tefasOku(govde: string): number | null {
-  try {
-    const j = JSON.parse(govde)
-    const d = Array.isArray(j?.data) ? j.data : []
-    return d.length ? sayi(d[d.length - 1]?.FIYAT) : null
-  } catch { return null }
-}
-
 const FON_ETIKETLERI = ['Son Fiyat', 'Birim Pay Değeri', 'Birim Pay Deger', 'Pay Fiyatı', 'Fiyat']
 
 /** Sayfada fiyat etiketini bulup yanindaki TR bicimli sayiyi okur. */
 function etiketliFiyat(govde: string): number | null {
-  const duz = govde.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ')
+  const duz = govde.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ')
   for (const e of FON_ETIKETLERI) {
     const m = duz.match(new RegExp(`${e}[^0-9]{0,80}?([0-9]{1,3}(?:[.,][0-9]+)+)`, 'i'))
     if (m) {
@@ -73,26 +65,26 @@ function etiketliFiyat(govde: string): number | null {
   return null
 }
 
-/** Eslesen etiketin etrafindaki metin — rakamin dogru yerden geldigini gormek icin. */
-function etiketKaniti(govde: string): string {
-  const duz = govde.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ')
-  for (const e of FON_ETIKETLERI) {
-    const i = duz.search(new RegExp(e, 'i'))
-    if (i >= 0) return duz.slice(Math.max(0, i - 40), i + 160)
+/** Sayfayi tanimak icin dokum: baslik, fon kodu geciyor mu, "fiyat" gecen ilk yerler. */
+function dokum(fon: string) {
+  return (govde: string) => {
+    const baslik = govde.match(/<title[^>]*>([^<]{0,120})/i)?.[1]?.trim() ?? '(başlık yok)'
+    const duz = govde.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ')
+    const kodVar = new RegExp(`\\b${fon}\\b`, 'i').test(duz)
+    const pencereler: string[] = []
+    const re = /fiyat|pay değeri|birim pay/gi
+    let m: RegExpExecArray | null
+    while ((m = re.exec(duz)) && pencereler.length < 3) {
+      pencereler.push(duz.slice(Math.max(0, m.index - 30), m.index + 110))
+    }
+    return `başlık="${baslik}" · ${fon} geçiyor mu: ${kodVar ? 'evet' : 'HAYIR'} · ${pencereler.join(' ⟂ ') || 'fiyat kelimesi yok'}`
   }
-  return duz.slice(0, 160)
 }
 
 const gg = (d: Date) => `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`
 
 export function istekler({ bist, abd, fon }: { bist: string; abd: string; fon: string }): Istek[] {
-  const bugun = new Date()
-  const onGunOnce = new Date(bugun.getTime() - 10 * 86_400_000)
-  const tefasGovde = new URLSearchParams({
-    fontip: 'YAT', sfontur: '', fonkod: fon, fongrup: '',
-    bastarih: gg(onGunOnce), bittarih: gg(bugun), fonturkod: '', fonunvantip: '',
-  })
-
   return [
     {
       ad: 'yahoo_bist', ne: `BİST hisse/ETF — ${bist}.IS`,
@@ -104,38 +96,43 @@ export function istekler({ bist, abd, fon }: { bist: string; abd: string; fon: s
       url: `https://query1.finance.yahoo.com/v8/finance/chart/${abd}?interval=1d&range=5d`,
       oku: yahooOku,
     },
-    // ── Yatirim fonu (PPF) — TEFAS Vercel'i guvenlik duvarinda kesiyor
-    // ("Request Rejected", ana sayfa dahil) ve API adresi tasinmis.
-    // Ucuncu tur: metin vekilleri ve fon fiyatini yayinlayan siteler.
+    // ── Yatirim fonu (PPF) — TEFAS kapali (guvenlik duvari), vekiller 403/zaman
+    // asimi, Mynet sayfasi acildi ama fiyat yanlis yerden okundu (hisse seridi).
+    // Bu tur: sayfalarin ne icerdigini DOKUP dogru ayiklayiciyi ona gore yazmak.
     {
-      ad: 'jina_tefas', ne: `TEFAS fon sayfası, metin vekili üzerinden — ${fon}`,
-      url: `https://r.jina.ai/https://www.tefas.gov.tr/FonAnaliz.aspx?FonKod=${fon}`,
-      oku: etiketliFiyat, kanit: etiketKaniti,
-    },
-    {
-      ad: 'allorigins_tefas', ne: `TEFAS API, vekil üzerinden — ${fon}`,
-      url: `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://www.tefas.gov.tr/api/DB/BindHistoryInfo?${tefasGovde.toString()}`)}`,
-      oku: (g) => tefasOku(g) ?? etiketliFiyat(g), kanit: (g) => g.slice(0, 200),
-    },
-    {
-      ad: 'mynet_fon', ne: `Mynet fon sayfası — ${fon}`,
+      ad: 'mynet_dokum', ne: `Mynet fon sayfası dökümü — ${fon}`,
       url: `https://finans.mynet.com/fon/${fon.toLowerCase()}/`,
-      oku: etiketliFiyat, kanit: etiketKaniti,
+      oku: () => null, kanit: dokum(fon),
     },
     {
-      ad: 'uzmanpara_fon', ne: `Uzmanpara fon sayfası — ${fon}`,
-      url: `https://uzmanpara.milliyet.com.tr/yatirim-fonlari/fon-detay/${fon}/`,
-      oku: etiketliFiyat, kanit: etiketKaniti,
+      ad: 'mynet_dokum2', ne: `Mynet fon sayfası (alternatif adres) — ${fon}`,
+      url: `https://finans.mynet.com/borsa/fonlar/${fon.toLowerCase()}/`,
+      oku: () => null, kanit: dokum(fon),
     },
     {
-      ad: 'fonradar', ne: `Fonradar — ${fon}`,
-      url: `https://fonradar.com/fon/${fon.toLowerCase()}`,
-      oku: etiketliFiyat, kanit: etiketKaniti,
+      ad: 'bigpara_fon', ne: `Bigpara fon sayfası — ${fon}`,
+      url: `https://bigpara.hurriyet.com.tr/fonlar/fon-detay/${fon.toLowerCase()}/`,
+      oku: etiketliFiyat, kanit: dokum(fon),
     },
     {
-      ad: 'jina_mynet', ne: `Mynet, metin vekili üzerinden — ${fon}`,
-      url: `https://r.jina.ai/https://finans.mynet.com/fon/${fon.toLowerCase()}/`,
-      oku: etiketliFiyat, kanit: etiketKaniti,
+      ad: 'isyatirim_fon', ne: `İş Yatırım fon verisi — ${fon}`,
+      url: `https://www.isyatirim.com.tr/_layouts/15/IsyatirimHisseForm/StockInfo.aspx?hisse=${fon}`,
+      oku: etiketliFiyat, kanit: dokum(fon),
+    },
+    {
+      ad: 'tefas_ip', ne: 'TEFAS — farklı yol (fon karşılaştırma ucu)',
+      url: `https://www.tefas.gov.tr/api/DB/BindComparisonFundReturns`,
+      init: {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          'x-requested-with': 'XMLHttpRequest',
+          referer: 'https://www.tefas.gov.tr/FonKarsilastirma.aspx',
+        },
+        body: new URLSearchParams({ calismatipi: '1', fontip: 'YAT', sfontur: '', kurucukod: '', fongrup: '', bastarih: gg(new Date(Date.now() - 10 * 86_400_000)), bittarih: gg(new Date()), fonturkod: '', fonunvantip: '', strperiod: '1,1,1,1,1,1,1', islemdurum: '1' }).toString(),
+      },
+      oku: (g) => { try { const j = JSON.parse(g); const d = Array.isArray(j?.data) ? j.data : []; return sayi(d.find((x: Record<string, unknown>) => String(x?.FONKODU ?? '').toUpperCase() === fon)?.SONFIYAT) } catch { return null } },
+      kanit: (g) => g.slice(0, 300),
     },
   ]
 }
@@ -171,7 +168,7 @@ export async function fiyatTanisi(semboller: { bist: string; abd: string; fon: s
       return {
         ad: i.ad, ne: i.ne, url: i.url, ok: r.ok, status: r.status, ms: Date.now() - basla,
         fiyat: r.ok ? i.oku(govde) : null,
-        bas: (i.kanit ? i.kanit(govde) : govde.slice(0, 160)).slice(0, 220),
+        bas: (i.kanit ? i.kanit(govde) : govde.slice(0, 160)).slice(0, 700),
         hata: null,
       }
     } catch (e) {
