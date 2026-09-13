@@ -82,7 +82,16 @@ function dokum(fon: string) {
   }
 }
 
-const gg = (d: Date) => `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`
+/** Sayfadaki "fon" gecen baglantilari listeler — dogru fon sayfasini bulmak icin. */
+function bagDokum(govde: string): string {
+  const baslik = govde.match(/<title[^>]*>([^<]{0,90})/i)?.[1]?.trim() ?? '(başlık yok)'
+  const baglar = [...govde.matchAll(/href="([^"]{3,120})"/gi)]
+    .map((m) => m[1])
+    .filter((h) => /fon|fund|fiyat|deger/i.test(h))
+  const tekil = [...new Set(baglar)].slice(0, 14)
+  return `başlık="${baslik}" · bağlantılar: ${tekil.join(' | ') || 'yok'}`
+}
+
 
 export function istekler({ bist, abd, fon }: { bist: string; abd: string; fon: string }): Istek[] {
   return [
@@ -96,43 +105,34 @@ export function istekler({ bist, abd, fon }: { bist: string; abd: string; fon: s
       url: `https://query1.finance.yahoo.com/v8/finance/chart/${abd}?interval=1d&range=5d`,
       oku: yahooOku,
     },
-    // ── Yatirim fonu (PPF) — TEFAS kapali (guvenlik duvari), vekiller 403/zaman
-    // asimi, Mynet sayfasi acildi ama fiyat yanlis yerden okundu (hisse seridi).
-    // Bu tur: sayfalarin ne icerdigini DOKUP dogru ayiklayiciyi ona gore yazmak.
+    // ── Yatirim fonu (PPF) — TEFAS kapali, aracı siteler 404/403.
+    // TP2 Tera Portfoy'un fonu: kurucunun kendi sitesinde gunluk fiyat
+    // yayinlanir ve orada guvenlik duvari olmaz. Once dogru sayfayi bulalim.
     {
-      ad: 'mynet_dokum', ne: `Mynet fon sayfası dökümü — ${fon}`,
-      url: `https://finans.mynet.com/fon/${fon.toLowerCase()}/`,
-      oku: () => null, kanit: dokum(fon),
+      ad: 'tera_ana', ne: 'Tera Portföy ana sayfa — fon bağlantıları',
+      url: 'https://www.teraportfoy.com.tr/',
+      oku: () => null, kanit: bagDokum,
     },
     {
-      ad: 'mynet_dokum2', ne: `Mynet fon sayfası (alternatif adres) — ${fon}`,
-      url: `https://finans.mynet.com/borsa/fonlar/${fon.toLowerCase()}/`,
-      oku: () => null, kanit: dokum(fon),
-    },
-    {
-      ad: 'bigpara_fon', ne: `Bigpara fon sayfası — ${fon}`,
-      url: `https://bigpara.hurriyet.com.tr/fonlar/fon-detay/${fon.toLowerCase()}/`,
+      ad: 'tera_fonlar', ne: 'Tera Portföy fon listesi',
+      url: 'https://www.teraportfoy.com.tr/fonlarimiz',
       oku: etiketliFiyat, kanit: dokum(fon),
     },
     {
-      ad: 'isyatirim_fon', ne: `İş Yatırım fon verisi — ${fon}`,
-      url: `https://www.isyatirim.com.tr/_layouts/15/IsyatirimHisseForm/StockInfo.aspx?hisse=${fon}`,
+      ad: 'tera_fiyat', ne: 'Tera Portföy fon fiyatları sayfası',
+      url: 'https://www.teraportfoy.com.tr/fon-fiyatlari',
       oku: etiketliFiyat, kanit: dokum(fon),
     },
     {
-      ad: 'tefas_ip', ne: 'TEFAS — farklı yol (fon karşılaştırma ucu)',
-      url: `https://www.tefas.gov.tr/api/DB/BindComparisonFundReturns`,
-      init: {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
-          'x-requested-with': 'XMLHttpRequest',
-          referer: 'https://www.tefas.gov.tr/FonKarsilastirma.aspx',
-        },
-        body: new URLSearchParams({ calismatipi: '1', fontip: 'YAT', sfontur: '', kurucukod: '', fongrup: '', bastarih: gg(new Date(Date.now() - 10 * 86_400_000)), bittarih: gg(new Date()), fonturkod: '', fonunvantip: '', strperiod: '1,1,1,1,1,1,1', islemdurum: '1' }).toString(),
-      },
-      oku: (g) => { try { const j = JSON.parse(g); const d = Array.isArray(j?.data) ? j.data : []; return sayi(d.find((x: Record<string, unknown>) => String(x?.FONKODU ?? '').toUpperCase() === fon)?.SONFIYAT) } catch { return null } },
-      kanit: (g) => g.slice(0, 300),
+      ad: 'fintables', ne: `Fintables — ${fon}`,
+      url: `https://fintables.com/fonlar/${fon}`,
+      oku: etiketliFiyat, kanit: dokum(fon),
+    },
+    {
+      ad: 'kap_fon', ne: `KAP fon bilgileri — ${fon}`,
+      url: `https://www.kap.org.tr/tr/api/fund/price/${fon}`,
+      oku: (g) => { try { const j = JSON.parse(g); return sayi((j?.price ?? j?.fiyat ?? j?.[0]?.price) as unknown) } catch { return null } },
+      kanit: (g) => g.slice(0, 250),
     },
   ]
 }
