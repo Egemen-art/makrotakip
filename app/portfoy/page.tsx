@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { supabaseSunucu } from '@/lib/supabase/server'
 import type { Nakit, PortfoyGetiri } from '@/lib/tipler'
 import PortfoyYonetimi from './PortfoyYonetimi'
@@ -17,7 +18,12 @@ export default async function PortfoySayfasi() {
 
   return (
     <>
-      <h1 className="text-[17px] font-semibold">Portföy</h1>
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <h1 className="text-[17px] font-semibold">Portföy</h1>
+        <Link href="/portfoy/varliklar" className="text-[12px] font-medium" style={{ color: 'var(--seri-1)' }}>
+          Varlıklar · adet bazlı →
+        </Link>
+      </div>
       <p className="mt-1 text-[12px]" style={{ color: 'var(--ink-muted)' }}>
         Getiri Modified Dietz ile hesaplanır; para giriş/çıkışı yoksa alan 0 yazılır.
       </p>
