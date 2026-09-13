@@ -4,9 +4,10 @@ import { revalidatePath } from 'next/cache'
 import { supabaseSunucu } from '@/lib/supabase/server'
 import { sayiOku, bugun } from '@/lib/bicim'
 import { fiyatGecmisi, fiyatOku, kurTarihli, type FiyatKaynagi } from '@/lib/fiyatKaynak'
+import { kurlariGetir } from '@/lib/kur'
 import {
   HAREKET_TURLERI, KAYNAK_TURLERI, VARLIK_SINIFLARI,
-  type KaynakTur, type Varlik, type VarlikSinif,
+  type KaynakTur, type Varlik, type VarlikDeger, type VarlikSinif,
 } from '@/lib/tipler-varlik'
 
 export type Sonuc = { tamam: true; bilgi?: string } | { tamam: false; hata: string }
@@ -256,12 +257,54 @@ export async function fiyatlariGuncelle(): Promise<Sonuc> {
   }
 
   const basarisiz = okumalar.filter((o) => o.okuma.fiyat === null)
+
+  // Gunun kuru: doviz kalemlerini TL'ye cevirmek ve dolar bazli getiri icin.
+  const gun = bugun()
+  const kur = await kurlariGetir()
+  if (kur.usdtry !== null) {
+    await sb.from('kur_gunluk').upsert({
+      tarih: gun, usdtry: kur.usdtry, eurtry: kur.eurtry,
+      kaynak: `/api/kur · ${kur.kaynak.usd ?? ''}`,
+    }, { onConflict: 'tarih' })
+  }
+
+  // GUNLUK OLCUM: bugun ne var, ne ediyor. Performans bu satirlardan
+  // zincirlenir; ayni gun ikinci kez basilirsa gunun satiri yenilenir.
+  const olcum = await gunlukOlcumYaz(gun)
+
   revalidatePath('/portfoy/varliklar')
   revalidatePath('/portfoy')
-  return {
-    tamam: true,
-    bilgi: basarisiz.length === 0
-      ? `${yazilacak.length} fiyat güncellendi.`
+  revalidatePath('/')
+  const parcalar = [
+    basarisiz.length === 0
+      ? `${yazilacak.length} fiyat güncellendi`
       : `${yazilacak.length} fiyat güncellendi · okunamadı: ${basarisiz.map((o) => `${o.varlik.kod} (${o.okuma.hata})`).join(', ')}`,
-  }
+    kur.usdtry === null ? 'kur alınamadı' : `USD/TRY ${kur.usdtry}`,
+    olcum,
+  ]
+  return { tamam: true, bilgi: parcalar.join(' · ') }
+}
+
+/** Bugunku degerleri portfoy_gunluk'e yazar (kalem bazinda). Fiyatsiz kalem yazilmaz. */
+async function gunlukOlcumYaz(gun: string): Promise<string> {
+  const sb = await supabaseSunucu()
+  const [{ data: degerler }, { data: kur }] = await Promise.all([
+    sb.from('v_varlik_deger').select('varlik_id, miktar, birim_fiyat, fiyat_para, fiyat_olculdu, deger_tl'),
+    sb.from('kur_gunluk').select('usdtry').order('tarih', { ascending: false }).limit(1).maybeSingle(),
+  ])
+  const satirlar = ((degerler ?? []) as VarlikDeger[])
+    .filter((d) => Number(d.miktar) !== 0 && d.deger_tl !== null)
+    .map((d) => ({
+      tarih: gun,
+      varlik_id: d.varlik_id,
+      miktar: Number(d.miktar),
+      fiyat: d.birim_fiyat === null ? null : Number(d.birim_fiyat),
+      para: d.fiyat_para,
+      usdtry: kur?.usdtry ?? null,
+      deger_tl: Number(d.deger_tl),
+      olculdu: d.fiyat_olculdu !== false,
+    }))
+  if (satirlar.length === 0) return 'günlük ölçüm: yazılacak kalem yok'
+  const { error } = await sb.from('portfoy_gunluk').upsert(satirlar, { onConflict: 'tarih,varlik_id' })
+  return error ? `günlük ölçüm yazılamadı: ${error.message}` : `günlük ölçüm: ${satirlar.length} kalem (${gun})`
 }

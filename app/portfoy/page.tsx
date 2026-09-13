@@ -1,25 +1,26 @@
 import Link from 'next/link'
 import { supabaseSunucu } from '@/lib/supabase/server'
-import type { Nakit, PortfoyGetiri } from '@/lib/tipler'
-import type { PortfoyBugun, PortfoySinif } from '@/lib/tipler-varlik'
+import type {
+  PortfoyBugun, PortfoyPerformans, PortfoySinif, VarlikDeger, VarlikPerformans,
+} from '@/lib/tipler-varlik'
 import BugunkuPortfoy from '@/components/BugunkuPortfoy'
-import PortfoyYonetimi from './PortfoyYonetimi'
-import PortfoyAnaliz from './PortfoyAnaliz'
+import PortfoyPerformansGorunumu from '@/components/PortfoyPerformans'
 
 export const dynamic = 'force-dynamic'
 
 export default async function PortfoySayfasi() {
   const sb = await supabaseSunucu()
-  const [{ data, error }, nk, bugunku, siniflar] = await Promise.all([
-    sb.from('v_portfoy_getiri').select('*').order('tarih'),
-    // Nakit elle girilmez: karar 49'un anlik nakti (YK guncel bakiyesi + eldeki nakit).
-    sb.from('v_nakit').select('*').limit(1),
-    // Adet bazli guncel deger; anlik goruntu gecmisiyle birlikte gosterilir.
+  // Anlik goruntu tablosu (finans.portfoy) artik OKUNMUYOR: performans
+  // bugunden itibaren gunluk olcumden (portfoy_gunluk) zincirlenir. Veri
+  // silinmedi, yalnizca ekran degisti.
+  const [bugunku, siniflar, degerler, toplam, kalemler] = await Promise.all([
     sb.from('v_portfoy_bugun').select('*').limit(1),
     sb.from('v_portfoy_sinif').select('*'),
+    sb.from('v_varlik_deger').select('*'),
+    sb.from('v_portfoy_performans').select('*').order('tarih'),
+    sb.from('v_varlik_performans').select('*').order('tarih'),
   ])
-  const satirlar = (data ?? []) as PortfoyGetiri[]
-  const nakit = ((nk.data ?? [])[0] ?? null) as Nakit | null
+  const error = [bugunku.error, siniflar.error, degerler.error, toplam.error, kalemler.error].find(Boolean)
   const ozet = ((bugunku.data ?? [])[0] ?? null) as PortfoyBugun | null
 
   return (
@@ -31,7 +32,8 @@ export default async function PortfoySayfasi() {
         </Link>
       </div>
       <p className="mt-1 text-[12px]" style={{ color: 'var(--ink-muted)' }}>
-        Getiri Modified Dietz ile hesaplanır; para giriş/çıkışı yoksa alan 0 yazılır.
+        Adet bazlı ölçüm: değer her gün fiyattan hesaplanır, getiri para akışlarından arındırılmış
+        günlük zincirdir (zaman ağırlıklı). Ölçüm &quot;Fiyatları güncelle&quot; ile yazılır.
       </p>
 
       {error && (
@@ -40,20 +42,24 @@ export default async function PortfoySayfasi() {
         </div>
       )}
 
-      {ozet && ozet.kalem > 0 && (
-        <div className="mt-3">
-          <BugunkuPortfoy ozet={ozet} siniflar={(siniflar.data ?? []) as PortfoySinif[]} />
-        </div>
+      {ozet && ozet.kalem > 0 ? (
+        <>
+          <div className="mt-3">
+            <BugunkuPortfoy ozet={ozet} siniflar={(siniflar.data ?? []) as PortfoySinif[]} />
+          </div>
+          <div className="mt-4">
+            <PortfoyPerformansGorunumu
+              degerler={(degerler.data ?? []) as VarlikDeger[]}
+              toplam={(toplam.data ?? []) as PortfoyPerformans[]}
+              kalemler={(kalemler.data ?? []) as VarlikPerformans[]}
+            />
+          </div>
+        </>
+      ) : (
+        <p className="kart mt-3 p-6 text-center text-[13px]" style={{ color: 'var(--ink-muted)' }}>
+          Henüz varlık yok. <Link href="/portfoy/varliklar" style={{ color: 'var(--seri-1)' }}>Varlıklar</Link> ekranından başla.
+        </p>
       )}
-
-      <h2 className="mt-6 text-[15px] font-semibold">Anlık görüntü geçmişi</h2>
-      <p className="mt-0.5 text-[12px]" style={{ color: 'var(--ink-muted)' }}>
-        Adet bazlı ölçüme geçmeden önce elle girilen değerler. Getiri grafiği buradan çiziliyor.
-      </p>
-
-      <PortfoyAnaliz satirlar={satirlar} />
-
-      <PortfoyYonetimi satirlar={satirlar} nakit={nakit} />
     </>
   )
 }

@@ -119,3 +119,26 @@ export type VarlikGetiri = {
   yil_yuzde: string | null
   ilk_fiyat_tarihi: string | null
 }
+
+/** v_varlik_performans — kalem bazinda gunluk TWR zinciri. */
+export type VarlikPerformans = {
+  varlik_id: number
+  kod: string
+  sinif: VarlikSinif
+  tarih: string
+  miktar: string
+  deger_tl: string | null
+  akis_tl: string | null
+  gun_yuzde: string | null
+  kumulatif_yuzde: string | null
+  baslangic: string
+}
+
+/** v_portfoy_performans — toplam portfoyun gunluk TWR zinciri. */
+export type PortfoyPerformans = {
+  tarih: string
+  deger_tl: string | null
+  akis_tl: string | null
+  gun_yuzde: string | null
+  kumulatif_yuzde: string | null
+}
