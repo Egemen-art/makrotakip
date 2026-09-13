@@ -105,34 +105,38 @@ export function istekler({ bist, abd, fon }: { bist: string; abd: string; fon: s
       url: `https://query1.finance.yahoo.com/v8/finance/chart/${abd}?interval=1d&range=5d`,
       oku: yahooOku,
     },
-    // ── Yatirim fonu (PPF) — Tera'nin sitesi "fetch failed" verdi (114 ms).
-    // DNS calisiyor (teraportfoy.com.tr -> 93.89.226.17, TR IP, Cloudflare yok),
-    // yani sorun baglanti/TLS seviyesinde. Varyantlari ve kontrol ucunu deneriz.
+    // ── Yatirim fonu (PPF) — dogru adres bulundu: teraportfoy.com.tr park
+    // edilmis (isimtescil), asil site https://teraportfoy.com ve aciliyor.
+    // .tr erisimi genel olarak sorunsuz (KAP aciliyor), TEFAS bilerek engelliyor.
     {
-      ad: 'tera_wwwsuz', ne: 'Tera Portföy — www olmadan (https)',
-      url: 'https://teraportfoy.com.tr/',
-      oku: () => null, kanit: bagDokum,
+      ad: 'tera_harita', ne: 'Tera Portföy site haritası — fon sayfaları',
+      url: 'https://teraportfoy.com/sitemap.xml',
+      oku: () => null,
+      kanit: (g) => {
+        const url = [...g.matchAll(/<loc>([^<]+)<\/loc>/gi)].map((m) => m[1])
+        const fonlu = url.filter((u) => /fon|fiyat|deger/i.test(u))
+        return `${url.length} adres · fon geçenler: ${(fonlu.length ? fonlu : url).slice(0, 16).join(' | ')}`
+      },
     },
     {
-      ad: 'tera_http', ne: 'Tera Portföy — düz http',
-      url: 'http://teraportfoy.com.tr/',
-      oku: () => null, kanit: bagDokum,
-    },
-    {
-      ad: 'tera_com', ne: 'Tera Portföy — .com alan adı',
+      ad: 'tera_ana2', ne: 'Tera Portföy ana sayfa — fon bağlantıları',
       url: 'https://teraportfoy.com/',
       oku: () => null, kanit: bagDokum,
     },
     {
-      ad: 'terayatirim', ne: 'Tera Yatırım (aracı kurum)',
-      url: 'https://www.terayatirim.com/',
-      oku: () => null, kanit: bagDokum,
+      ad: 'tera_fonlarimiz', ne: 'Tera Portföy — /fonlarimiz',
+      url: 'https://teraportfoy.com/fonlarimiz',
+      oku: etiketliFiyat, kanit: dokum(fon),
     },
     {
-      ad: 'kontrol_kap', ne: 'Kontrol: KAP ana sayfası açılıyor mu (.tr erişimi)',
-      url: 'https://www.kap.org.tr/tr/',
-      oku: (g) => (g.toLocaleLowerCase('tr').includes('kap') ? 1 : null),
-      kanit: (g) => g.slice(0, 150),
+      ad: 'tera_fonlar2', ne: 'Tera Portföy — /fonlar',
+      url: 'https://teraportfoy.com/fonlar',
+      oku: etiketliFiyat, kanit: dokum(fon),
+    },
+    {
+      ad: 'tera_fiyat2', ne: 'Tera Portföy — /fon-fiyatlari',
+      url: 'https://teraportfoy.com/fon-fiyatlari',
+      oku: etiketliFiyat, kanit: dokum(fon),
     },
   ]
 }

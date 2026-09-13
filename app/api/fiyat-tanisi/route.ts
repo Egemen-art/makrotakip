@@ -31,7 +31,7 @@ export async function GET(istek: NextRequest) {
       aktor: 'claude_code',
       tur: 'teshis',
       ozet: `Fiyat kaynagi teshisi — calisan: ${calisan.length ? calisan.join(', ') : 'yok'}`,
-      detay: JSON.stringify({ semboller, sonuc: sonuc.map(({ bas, ...k }) => ({ ...k, bas: bas.slice(0, 80) })) }, null, 1),
+      detay: JSON.stringify({ semboller, sonuc: sonuc.map(({ bas, ...k }) => ({ ...k, bas: bas.slice(0, 700) })) }, null, 1),
       nesne: 'fiyat kaynaklari',
     })
     yazildi = error ? `olaylar yazilamadi: ${error.message}` : 'olaylar tablosuna yazildi'
