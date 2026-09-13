@@ -32,6 +32,8 @@ type Istek = {
   /** Istekten once cerez almak icin gezilecek sayfa (TEFAS oturum istiyor). */
   cerezUrl?: string
   oku: (govde: string) => number | null
+  /** Yanitin hangi parcasi kanit olarak saklanacak; HTML'de govdenin basi ise yaramaz. */
+  kanit?: (govde: string) => string
 }
 
 const sayi = (v: unknown): number | null => {
@@ -56,12 +58,29 @@ function tefasOku(govde: string): number | null {
   } catch { return null }
 }
 
-/** TEFAS FonAnaliz sayfasi: "Son Fiyat" basliginin altindaki deger. */
-function fonAnalizOku(govde: string): number | null {
-  const m = govde.replace(/\s+/g, ' ').match(/Son Fiyat[^0-9]{0,120}?([0-9]{1,3}(?:[.,][0-9]+)+)/i)
-  if (!m) return null
-  // TR bicimi: binlik nokta, ondalik virgul.
-  return sayi(m[1].replace(/\./g, '').replace(',', '.'))
+const FON_ETIKETLERI = ['Son Fiyat', 'Birim Pay Değeri', 'Birim Pay Deger', 'Pay Fiyatı', 'Fiyat']
+
+/** Sayfada fiyat etiketini bulup yanindaki TR bicimli sayiyi okur. */
+function etiketliFiyat(govde: string): number | null {
+  const duz = govde.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ')
+  for (const e of FON_ETIKETLERI) {
+    const m = duz.match(new RegExp(`${e}[^0-9]{0,80}?([0-9]{1,3}(?:[.,][0-9]+)+)`, 'i'))
+    if (m) {
+      const n = sayi(m[1].replace(/\./g, '').replace(',', '.'))
+      if (n !== null) return n
+    }
+  }
+  return null
+}
+
+/** Eslesen etiketin etrafindaki metin — rakamin dogru yerden geldigini gormek icin. */
+function etiketKaniti(govde: string): string {
+  const duz = govde.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ')
+  for (const e of FON_ETIKETLERI) {
+    const i = duz.search(new RegExp(e, 'i'))
+    if (i >= 0) return duz.slice(Math.max(0, i - 40), i + 160)
+  }
+  return duz.slice(0, 160)
 }
 
 const gg = (d: Date) => `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`
@@ -85,43 +104,38 @@ export function istekler({ bist, abd, fon }: { bist: string; abd: string; fon: s
       url: `https://query1.finance.yahoo.com/v8/finance/chart/${abd}?interval=1d&range=5d`,
       oku: yahooOku,
     },
-    // ── Yatirim fonu (PPF) — ilk turda TEFAS API'si 404/fault dondu.
-    // Once "TEFAS bizi hic aliyor mu" diye ana sayfa, sonra varyantlar.
+    // ── Yatirim fonu (PPF) — TEFAS Vercel'i guvenlik duvarinda kesiyor
+    // ("Request Rejected", ana sayfa dahil) ve API adresi tasinmis.
+    // Ucuncu tur: metin vekilleri ve fon fiyatini yayinlayan siteler.
     {
-      ad: 'tefas_anasayfa', ne: 'TEFAS ana sayfa (erişim testi)',
-      url: 'https://www.tefas.gov.tr/',
-      oku: (g) => (g.toLocaleLowerCase('tr').includes('tefas') ? 1 : null),
+      ad: 'jina_tefas', ne: `TEFAS fon sayfası, metin vekili üzerinden — ${fon}`,
+      url: `https://r.jina.ai/https://www.tefas.gov.tr/FonAnaliz.aspx?FonKod=${fon}`,
+      oku: etiketliFiyat, kanit: etiketKaniti,
     },
     {
-      ad: 'tefas_fonanaliz', ne: `TEFAS fon sayfası — ${fon}`,
-      url: `https://www.tefas.gov.tr/FonAnaliz.aspx?FonKod=${fon}`,
-      oku: fonAnalizOku,
+      ad: 'allorigins_tefas', ne: `TEFAS API, vekil üzerinden — ${fon}`,
+      url: `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://www.tefas.gov.tr/api/DB/BindHistoryInfo?${tefasGovde.toString()}`)}`,
+      oku: (g) => tefasOku(g) ?? etiketliFiyat(g), kanit: (g) => g.slice(0, 200),
     },
     {
-      ad: 'tefas_post_cerez', ne: `TEFAS API (çerez alarak) — ${fon}`,
-      url: 'https://www.tefas.gov.tr/api/DB/BindHistoryInfo',
-      cerezUrl: 'https://www.tefas.gov.tr/TarihselVeriler.aspx',
-      init: {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
-          'x-requested-with': 'XMLHttpRequest',
-          referer: 'https://www.tefas.gov.tr/TarihselVeriler.aspx',
-          origin: 'https://www.tefas.gov.tr',
-        },
-        body: tefasGovde.toString(),
-      },
-      oku: tefasOku,
+      ad: 'mynet_fon', ne: `Mynet fon sayfası — ${fon}`,
+      url: `https://finans.mynet.com/fon/${fon.toLowerCase()}/`,
+      oku: etiketliFiyat, kanit: etiketKaniti,
     },
     {
-      ad: 'tefas_get', ne: `TEFAS API (GET) — ${fon}`,
-      url: `https://www.tefas.gov.tr/api/DB/BindHistoryInfo?${tefasGovde.toString()}`,
-      oku: tefasOku,
+      ad: 'uzmanpara_fon', ne: `Uzmanpara fon sayfası — ${fon}`,
+      url: `https://uzmanpara.milliyet.com.tr/yatirim-fonlari/fon-detay/${fon}/`,
+      oku: etiketliFiyat, kanit: etiketKaniti,
     },
     {
-      ad: 'yahoo_fon', ne: `Yahoo'da fon kodu — ${fon}.IS`,
-      url: `https://query1.finance.yahoo.com/v8/finance/chart/${fon}.IS?interval=1d&range=5d`,
-      oku: yahooOku,
+      ad: 'fonradar', ne: `Fonradar — ${fon}`,
+      url: `https://fonradar.com/fon/${fon.toLowerCase()}`,
+      oku: etiketliFiyat, kanit: etiketKaniti,
+    },
+    {
+      ad: 'jina_mynet', ne: `Mynet, metin vekili üzerinden — ${fon}`,
+      url: `https://r.jina.ai/https://finans.mynet.com/fon/${fon.toLowerCase()}/`,
+      oku: etiketliFiyat, kanit: etiketKaniti,
     },
   ]
 }
@@ -157,7 +171,7 @@ export async function fiyatTanisi(semboller: { bist: string; abd: string; fon: s
       return {
         ad: i.ad, ne: i.ne, url: i.url, ok: r.ok, status: r.status, ms: Date.now() - basla,
         fiyat: r.ok ? i.oku(govde) : null,
-        bas: govde.slice(0, 160),
+        bas: (i.kanit ? i.kanit(govde) : govde.slice(0, 160)).slice(0, 220),
         hata: null,
       }
     } catch (e) {
