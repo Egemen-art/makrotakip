@@ -65,7 +65,9 @@ export async function hareketEkle(form: FormData): Promise<Sonuc> {
   if (!tarih) return { tamam: false, hata: 'Tarih gerekli.' }
   if (!(HAREKET_TURLERI as readonly string[]).includes(tur)) return { tamam: false, hata: 'Hareket türü geçersiz.' }
   if (miktar === null) return { tamam: false, hata: 'Miktar gerekli.' }
-  if (miktar <= 0 && tur !== 'Düzeltme') return { tamam: false, hata: 'Miktar sıfırdan büyük olmalı (eksiltmek için Satım/Çıkış kullan).' }
+  // Duzeltme MUTLAKTIR: elindeki gercek adet. 0 gecerlidir (hepsi cikti), negatif degil.
+  if (miktar < 0) return { tamam: false, hata: 'Miktar negatif olamaz (azaltmak için Satım/Çıkış kullan).' }
+  if (miktar === 0 && tur !== 'Düzeltme') return { tamam: false, hata: 'Miktar sıfırdan büyük olmalı.' }
 
   const sb = await supabaseSunucu()
   const birimFiyat = sayiOku(form.get('birim_fiyat'))
@@ -112,6 +114,9 @@ export async function hareketEkle(form: FormData): Promise<Sonuc> {
   })
   if (error) return { tamam: false, hata: error.message }
   revalidatePath('/portfoy/varliklar')
+  if (tur === 'Düzeltme') {
+    bilgi = `${varlik?.kod ?? 'Varlık'} adedi ${miktar} olarak ayarlandı${bilgi ? ` · ${bilgi}` : ''}`
+  }
   return { tamam: true, bilgi }
 }
 

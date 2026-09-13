@@ -148,6 +148,10 @@ export default function VarlikYonetimi({
               Ekle
             </button>
             <p className="text-[11px] sm:col-span-3 lg:col-span-5" style={{ color: 'var(--ink-muted)' }}>
+              <strong>Düzeltme</strong> üstüne eklemez, <strong>ayarlar</strong>: elindeki gerçek
+              adedi yaz, sonraki alım/satımlar onun üstüne işlenir. Tutar da yazarsan maliyet de
+              o değere ayarlanır.
+              <br />
               <strong>Birim fiyat</strong> yazarsan <strong>Tutar ₺</strong> kendiliğinden hesaplanır
               — döviz kalemlerinde o günün kuruyla, bugünkünle değil. Tutar yalnızca <em>getiri</em>
               için gerekli; <em>değer</em> zaten adet × güncel fiyattan çıkıyor. İkisini de boş
