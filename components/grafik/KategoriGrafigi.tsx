@@ -422,19 +422,53 @@ function aylikSeyir(kayitlar: KategoriSerisi[], yon: Yon, adlar: string[], secil
   return aylar.map((donem) => ({ donem, toplam: t.get(donem) ?? 0 }))
 }
 
+type DetaySatir = { ad: string; toplam: number; adet: number }
+
+/** Tek bir ayda, secili kategorinin alt kategorileri — buyukten kucuge. */
+function ayinAltlari(kayitlar: AylikKategori[], yon: Yon, kategori: string, donem: string): DetaySatir[] {
+  return kayitlar
+    .filter((k) => k.yon === yon && k.kategori === kategori && k.ay === donem && Number(k.toplam) > 0)
+    .map((k) => ({ ad: k.alt === '—' ? '(alt kategori yok)' : k.alt, toplam: Number(k.toplam), adet: k.adet }))
+    .sort((a, b) => b.toplam - a.toplam || trSirala(a.ad, b.ad))
+}
+
+/** Tek bir ayda, "Diger"e katlanan kategorilerin tutarlari — buyukten kucuge. */
+function ayinKategorileri(kayitlar: KategoriSerisi[], yon: Yon, adlar: string[], donem: string): DetaySatir[] {
+  const kume = new Set(adlar)
+  return kayitlar
+    .filter((k) => k.yon === yon && k.donem === donem && kume.has(k.kategori) && Number(k.toplam) > 0)
+    .map((k) => ({ ad: k.kategori, toplam: Number(k.toplam), adet: k.adet }))
+    .sort((a, b) => b.toplam - a.toplam || trSirala(a.ad, b.ad))
+}
+
 /** Kirilimin altindaki ay ay seyir. Her cubugun uzerinde tutari yazar. */
-function AylikSeyirGrafigi({ veri, ad, renk }: { veri: { donem: string; toplam: number }[]; ad: string; renk: string }) {
+function AylikSeyirGrafigi({ veri, ad, renk, ay, ayDegistir, satirlar }: {
+  veri: { donem: string; toplam: number }[]
+  ad: string
+  renk: string
+  /** Tiklanan ay ('YYYY-MM'); detayi grafigin altinda acilir. */
+  ay: string | null
+  ayDegistir: (donem: string | null) => void
+  /** Secili ayin kirilimi; ay yokken bos. */
+  satirlar: DetaySatir[]
+}) {
   const enBuyuk = Math.max(0, ...veri.map((v) => v.toplam))
+  const ayToplami = ay ? (veri.find((v) => v.donem === ay)?.toplam ?? 0) : 0
   if (veri.length === 0 || enBuyuk === 0) return null
   return (
     <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--hair)' }}>
       <p className="mb-1 text-[12px]" style={{ color: 'var(--ink-2)' }}>
         <span aria-hidden className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle" style={{ background: renk }} />
         {ad} · son {veri.length} ay
+        <span className="ml-2 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+          bir aya tıkla, o ayın detayı açılsın
+        </span>
       </p>
       {/* 12 etiketli cubuk dar ekrana sigmaz: kirpmak yerine yatay kaydirilir. */}
       <div className="overflow-x-auto">
-        <div className="h-[190px] min-w-[520px]">
+        {/* Recharts tiklanan katmani (tabindex=-1) odakliyor; tarayici halkasi secili cubugun
+            uzerine gurultu ekliyor. Klavyeyle odaklanan sarmalayicinin halkasi yerinde kalir. */}
+        <div className="h-[190px] min-w-[520px] [&_.recharts-surface_g:focus]:outline-none">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={veri} margin={{ top: 18, right: 4, bottom: 0, left: 4 }}>
             <XAxis
@@ -449,7 +483,19 @@ function AylikSeyirGrafigi({ veri, ad, renk }: { veri: { donem: string; toplam: 
                 Eksen gizli oldugu icin tavan yuvarlanmaz — cubuklar alani doldurur. */}
             <YAxis hide domain={[0, enBuyuk * 1.18]} />
             <Tooltip content={<Ipucu />} cursor={{ fill: 'var(--grid)', opacity: 0.45 }} />
-            <Bar dataKey="toplam" name={ad} fill={renk} radius={[4, 4, 0, 0]} maxBarSize={34} isAnimationActive={false}>
+            <Bar
+              dataKey="toplam"
+              name={ad}
+              fill={renk}
+              radius={[4, 4, 0, 0]}
+              maxBarSize={34}
+              isAnimationActive={false}
+              onClick={(_, i) => ayDegistir(veri[i]?.donem ?? null)}
+              style={{ cursor: 'pointer' }}
+            >
+              {veri.map((v) => (
+                <Cell key={v.donem} fill={renk} fillOpacity={ay && ay !== v.donem ? 0.3 : 1} />
+              ))}
               <LabelList
                 dataKey="toplam"
                 position="top"
@@ -464,6 +510,51 @@ function AylikSeyirGrafigi({ veri, ad, renk }: { veri: { donem: string; toplam: 
         </ResponsiveContainer>
         </div>
       </div>
+
+      {ay && (
+        <div className="mt-2 rounded-lg p-3" style={{ border: '1px solid var(--hair)', background: 'var(--surface)' }}>
+          <div className="mb-2 flex items-baseline justify-between gap-3">
+            <span className="text-[12px] font-semibold">
+              <span aria-hidden className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle" style={{ background: renk }} />
+              {ad} · {donemEtiket(ay)}
+              <span className="rakam ml-2 font-medium" style={{ color: 'var(--ink-2)' }}>{tl(ayToplami)}</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => ayDegistir(null)}
+              className="shrink-0 text-[12px]"
+              style={{ color: 'var(--ink-muted)' }}
+              aria-label="Ay detayını kapat"
+            >
+              kapat ✕
+            </button>
+          </div>
+          {satirlar.length === 0 ? (
+            <p className="py-3 text-center text-[12px]" style={{ color: 'var(--ink-muted)' }}>Bu ayda kayıt yok.</p>
+          ) : (
+            <ul className="max-h-[260px] overflow-y-auto">
+              {satirlar.map((r) => (
+                <li key={r.ad} className="grid grid-cols-[minmax(90px,1fr)_auto_auto] items-center gap-x-3 py-1 text-[12px] sm:grid-cols-[minmax(120px,1fr)_minmax(80px,2fr)_auto_auto]">
+                  <span className="truncate">
+                    {r.ad}
+                    <span className="rakam ml-1.5 text-[11px]" style={{ color: 'var(--ink-muted)' }}>· {r.adet} işlem</span>
+                  </span>
+                  <span className="hidden h-2 overflow-hidden rounded-full sm:block" style={{ background: 'var(--grid)' }} aria-hidden>
+                    <span
+                      className="block h-full rounded-full"
+                      style={{ width: `${Math.max(2, (r.toplam / satirlar[0].toplam) * 100)}%`, background: renk }}
+                    />
+                  </span>
+                  <span className="rakam text-right font-medium">{tl(r.toplam)}</span>
+                  <span className="rakam w-12 text-right" style={{ color: 'var(--ink-muted)' }}>
+                    {ayToplami > 0 ? yuzde(r.toplam / ayToplami) : '—'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -480,14 +571,26 @@ function PastaGorunumu({
   const [aralik, setAralik] = useState<PastaAralik>('1')
   // Tiklanan dilim: alt kategori kirilimi acilir. Pencere degisince kapanir.
   const [secili, setSecili] = useState<string | null>(null)
-  function aralikDegistir(a: PastaAralik) { setAralik(a); setSecili(null) }
-  function sec(ad: string | undefined) { if (ad) setSecili((s) => (s === ad ? null : ad)) }
+  // Seyir grafiginde tiklanan ay. Dilim ya da pencere degisince kapanir.
+  const [seyirAy, setSeyirAy] = useState<string | null>(null)
+  function aralikDegistir(a: PastaAralik) { setAralik(a); setSecili(null); setSeyirAy(null) }
+  function sec(ad: string | undefined) {
+    if (!ad) return
+    setSecili((s) => (s === ad ? null : ad))
+    setSeyirAy(null)
+  }
+  function ayDegistir(donem: string | null) { setSeyirAy((a) => (a === donem ? null : donem)) }
   useEffect(() => {
     if (!secili) return
-    const kacis = (e: KeyboardEvent) => { if (e.key === 'Escape') setSecili(null) }
+    // Escape once ay detayini, sonra kirilimi kapatir — icten disa.
+    const kacis = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (seyirAy) setSeyirAy(null)
+      else setSecili(null)
+    }
     document.addEventListener('keydown', kacis)
     return () => document.removeEventListener('keydown', kacis)
-  }, [secili])
+  }, [secili, seyirAy])
   const hesap = useMemo(
     () => dilimleriHesapla(kayitlar, yon, seciliAy, aralik),
     [kayitlar, yon, seciliAy, aralik],
@@ -521,6 +624,12 @@ function PastaGorunumu({
     () => (kirilim ? aylikSeyir(kayitlar, yon, kirilim.seyirAdlari, seciliAy) : []),
     [kirilim, kayitlar, yon, seciliAy],
   )
+  // Tiklanan ayin kirilimi: normal dilimde alt kategoriler, Diger'de katlanan kategoriler.
+  const ayDetayi = useMemo<DetaySatir[]>(() => {
+    if (!secili || !seyirAy) return []
+    if (secili === DIGER) return ayinKategorileri(kayitlar, yon, katlananlar.map((d) => d.ad), seyirAy)
+    return ayinAltlari(altKategoriler, yon, secili, seyirAy)
+  }, [secili, seyirAy, katlananlar, kayitlar, yon, altKategoriler])
   const ilk = aylar[0]
   const son = aylar.at(-1)
   const pencereEtiketi =
@@ -541,7 +650,7 @@ function PastaGorunumu({
         </p>
       ) : (
         <div className="flex flex-wrap items-center gap-6">
-          <div className="relative h-[240px] w-[240px] shrink-0">
+          <div className="relative h-[240px] w-[240px] shrink-0 [&_.recharts-surface_g:focus]:outline-none">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -641,10 +750,10 @@ function PastaGorunumu({
               {kirilim.satirlar.map((r) => {
                 const enBuyuk = kirilim.satirlar[0].toplam
                 return (
-                  <li key={r.ad} className="grid items-center gap-x-3 py-1 text-[12px]" style={{ gridTemplateColumns: 'minmax(120px, 1fr) minmax(80px, 2fr) auto auto' }}>
+                  <li key={r.ad} className="grid grid-cols-[minmax(90px,1fr)_auto_auto] items-center gap-x-3 py-1 text-[12px] sm:grid-cols-[minmax(120px,1fr)_minmax(80px,2fr)_auto_auto]">
                     <span className="truncate">{r.ad}</span>
                     {/* Tek renk, buyukluk: secili kategorinin rengiyle ince cubuk */}
-                    <span className="h-2 overflow-hidden rounded-full" style={{ background: 'var(--grid)' }} aria-hidden>
+                    <span className="hidden h-2 overflow-hidden rounded-full sm:block" style={{ background: 'var(--grid)' }} aria-hidden>
                       <span className="block h-full rounded-full" style={{ width: `${Math.max(2, (r.toplam / enBuyuk) * 100)}%`, background: renk(secili!) }} />
                     </span>
                     <span className="rakam text-right font-medium">{tl(r.toplam)}</span>
@@ -657,7 +766,14 @@ function PastaGorunumu({
             </ul>
           )}
 
-          <AylikSeyirGrafigi veri={seyir} ad={secili!} renk={renk(secili!)} />
+          <AylikSeyirGrafigi
+            veri={seyir}
+            ad={secili!}
+            renk={renk(secili!)}
+            ay={seyirAy}
+            ayDegistir={ayDegistir}
+            satirlar={ayDetayi}
+          />
         </div>
       )}
     </div>
