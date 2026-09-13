@@ -111,11 +111,18 @@ export default function VarlikYonetimi({
             >
               {KAYNAK_TURLERI.map((k) => <option key={k} value={k}>{KAYNAK_ETIKETI[k]}</option>)}
             </select>
-            <input
-              name="kaynak_sembol" placeholder="Sembol (THYAO / AAPL / TP2)" aria-label="Sembol"
-              disabled={kaynakTur === 'elle' || kaynakTur === 'gram_altin'}
-              className="rounded-lg px-2 py-1.5 text-[13px]" style={kutu}
-            />
+            {kaynakTur === 'elle' ? (
+              <>
+                <input name="deger" inputMode="decimal" placeholder="Şu anki değer ₺" aria-label="Şu anki değer" className="rakam rounded-lg px-2 py-1.5 text-[13px]" style={kutu} />
+                <input name="yatirilan" inputMode="decimal" placeholder="Yatırdığın ₺ (varsa)" aria-label="Yatırılan" className="rakam rounded-lg px-2 py-1.5 text-[13px]" style={kutu} />
+              </>
+            ) : (
+              <input
+                name="kaynak_sembol" placeholder="Sembol (THYAO / AAPL / TP2)" aria-label="Sembol"
+                disabled={kaynakTur === 'gram_altin'}
+                className="rounded-lg px-2 py-1.5 text-[13px]" style={kutu}
+              />
+            )}
             <select name="para" defaultValue={kaynakTur === 'abd' ? 'USD' : 'TRY'} aria-label="Fiyat para birimi" className="rounded-lg px-2 py-1.5 text-[13px]" style={kutu}>
               <option value="TRY">Fiyat ₺</option>
               <option value="USD">Fiyat $</option>
@@ -124,6 +131,13 @@ export default function VarlikYonetimi({
             <button type="submit" disabled={bekliyor} className="rounded-lg px-3 py-1.5 text-[13px] font-medium text-white sm:col-span-3 lg:col-span-1" style={{ background: 'var(--seri-1)' }}>
               Ekle
             </button>
+            {kaynakTur === 'elle' && (
+              <p className="text-[11px] sm:col-span-3 lg:col-span-6" style={{ color: 'var(--ink-muted)' }}>
+                Fiyat kaynağı olmayan kalemde (BES, vadeli mevduat) adet diye bir şey yok: değeri
+                kalemin kendisidir. Ayrıca hareket girmene gerek yok, buraya yazdığın değer yeter;
+                sonra değiştikçe &quot;Elle değer gir&quot;den güncellersin.
+              </p>
+            )}
           </form>
         </div>
       )}
@@ -195,7 +209,11 @@ export default function VarlikYonetimi({
                       <span className="ml-1.5 text-[11px]" style={{ color: 'var(--ink-muted)' }}>· {v.kaynak_sembol}</span>
                     )}
                   </td>
-                  <td className="rakam px-3 py-2 text-right">{miktarBicim(Number(d.miktar))}</td>
+                  <td className="rakam px-3 py-2 text-right">
+                    {v?.kaynak_tur === 'elle'
+                      ? <span style={{ color: 'var(--ink-muted)' }}>—</span>
+                      : miktarBicim(Number(d.miktar))}
+                  </td>
                   <td className="rakam px-3 py-2 text-right">
                     {d.birim_fiyat === null
                       ? <span style={{ color: 'var(--ink-muted)' }}>—</span>

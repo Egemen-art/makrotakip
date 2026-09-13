@@ -30,15 +30,40 @@ export async function varlikEkle(form: FormData): Promise<Sonuc> {
   }
 
   const sb = await supabaseSunucu()
-  const { error } = await sb.from('varlik').insert({
+  const { data: yeni, error } = await sb.from('varlik').insert({
     kod, ad, sinif, para, kaynak_tur: kaynakTur, kaynak_sembol: sembol,
     not_: metin(form, 'not_') || null,
-  })
+  }).select('id').single()
   if (error) {
     return { tamam: false, hata: error.code === '23505' ? `${kod} zaten var.` : error.message }
   }
+
+  // Elle degerlenen kalemde (BES, vadeli mevduat) "adet" diye bir sey yok:
+  // deger dogrudan kalemin kendisidir. Kullaniciya 1 yazdirmak yerine
+  // pozisyonu 1'e sabitleyip degeri fiyat olarak tutuyoruz.
+  let bilgi: string | undefined
+  if (kaynakTur === 'elle' && yeni) {
+    const deger = sayiOku(form.get('deger'))
+    const yatirilan = sayiOku(form.get('yatirilan'))
+    const gun = bugun()
+
+    await sb.from('varlik_hareket').insert({
+      varlik_id: yeni.id, tarih: gun, tur: 'Giriş', miktar: 1,
+      tutar: yatirilan, kaynak: 'Elle değerlenen kalem',
+    })
+    if (deger !== null && deger > 0) {
+      await sb.from('fiyat').upsert({
+        varlik_id: yeni.id, tarih: gun, fiyat: deger, para,
+        kaynak: 'Elle girildi', olculdu: false,
+      }, { onConflict: 'varlik_id,tarih' })
+      bilgi = `${kod} eklendi · değer ${deger.toFixed(2)} ${para === 'USD' ? '$' : '₺'} olarak yazıldı.`
+    } else {
+      bilgi = `${kod} eklendi · değerini "Elle değer gir" bölümünden yaz.`
+    }
+  }
+
   revalidatePath('/portfoy/varliklar')
-  return { tamam: true }
+  return { tamam: true, bilgi }
 }
 
 export async function varlikSil(id: number): Promise<Sonuc> {
