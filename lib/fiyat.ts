@@ -31,6 +31,10 @@ type Istek = {
   init?: RequestInit
   /** Istekten once cerez almak icin gezilecek sayfa (TEFAS oturum istiyor). */
   cerezUrl?: string
+  /** Once bu site haritasi cekilir, fon koduyla biten adres bulunur, sonra o adres okunur. */
+  haritaUrl?: string
+  /** Haritada aranacak adres deseni. */
+  haritaDesen?: RegExp
   oku: (govde: string) => number | null
   /** Yanitin hangi parcasi kanit olarak saklanacak; HTML'de govdenin basi ise yaramaz. */
   kanit?: (govde: string) => string
@@ -105,37 +109,26 @@ export function istekler({ bist, abd, fon }: { bist: string; abd: string; fon: s
       url: `https://query1.finance.yahoo.com/v8/finance/chart/${abd}?interval=1d&range=5d`,
       oku: yahooOku,
     },
-    // ── Yatirim fonu (PPF) — dogru adres bulundu: teraportfoy.com.tr park
-    // edilmis (isimtescil), asil site https://teraportfoy.com ve aciliyor.
-    // .tr erisimi genel olarak sorunsuz (KAP aciliyor), TEFAS bilerek engelliyor.
+    // ── Yatirim fonu (PPF) — Tera'nin site haritasi calisiyor (178 adres) ve
+    // fon sayfalari ".../fonlarimiz/<kategori>/<fon-adi>-<kod>" deseninde.
+    // Adresi tahmin etmek yerine haritadan buluyoruz.
     {
-      ad: 'tera_harita', ne: 'Tera Portföy site haritası — fon sayfaları',
-      url: 'https://teraportfoy.com/sitemap.xml',
-      oku: () => null,
-      kanit: (g) => {
-        const url = [...g.matchAll(/<loc>([^<]+)<\/loc>/gi)].map((m) => m[1])
-        const fonlu = url.filter((u) => /fon|fiyat|deger/i.test(u))
-        return `${url.length} adres · fon geçenler: ${(fonlu.length ? fonlu : url).slice(0, 16).join(' | ')}`
-      },
-    },
-    {
-      ad: 'tera_ana2', ne: 'Tera Portföy ana sayfa — fon bağlantıları',
+      ad: 'tera_fon_sayfasi', ne: `Tera Portföy — ${fon} fon sayfası (haritadan)`,
       url: 'https://teraportfoy.com/',
-      oku: () => null, kanit: bagDokum,
-    },
-    {
-      ad: 'tera_fonlarimiz', ne: 'Tera Portföy — /fonlarimiz',
-      url: 'https://teraportfoy.com/fonlarimiz',
+      haritaUrl: 'https://teraportfoy.com/sitemap.xml',
+      haritaDesen: new RegExp(`-${fon}/?$`, 'i'),
       oku: etiketliFiyat, kanit: dokum(fon),
     },
     {
-      ad: 'tera_fonlar2', ne: 'Tera Portföy — /fonlar',
-      url: 'https://teraportfoy.com/fonlar',
+      ad: 'tera_fon_sayfasi_www', ne: `Tera Portföy — ${fon} (www site haritası)`,
+      url: 'https://www.teraportfoy.com/',
+      haritaUrl: 'https://www.teraportfoy.com/sitemap.xml',
+      haritaDesen: new RegExp(`-${fon}(/|$)`, 'i'),
       oku: etiketliFiyat, kanit: dokum(fon),
     },
     {
-      ad: 'tera_fiyat2', ne: 'Tera Portföy — /fon-fiyatlari',
-      url: 'https://teraportfoy.com/fon-fiyatlari',
+      ad: 'tera_fon_listesi', ne: 'Tera Portföy — fon listesi sayfası dökümü',
+      url: 'https://www.teraportfoy.com/fonlarimiz',
       oku: etiketliFiyat, kanit: dokum(fon),
     },
   ]
@@ -157,7 +150,27 @@ export async function fiyatTanisi(semboller: { bist: string; abd: string; fon: s
         cerez = (c.headers.getSetCookie?.() ?? []).map((k) => k.split(';')[0]).join('; ')
       }
 
-      const r = await fetch(i.url, {
+      // Site haritasindan fonun kendi sayfasini bul (adres tahmin etme).
+      let url = i.url
+      if (i.haritaUrl) {
+        const h = await fetch(i.haritaUrl, {
+          signal: AbortSignal.timeout(ZAMAN_ASIMI_MS), cache: 'no-store',
+          headers: { 'user-agent': 'Mozilla/5.0 (compatible; finans-takip/1.0)' },
+        })
+        const govdeH = await h.text()
+        const bulunan = [...govdeH.matchAll(/<loc>([^<]+)<\/loc>/gi)]
+          .map((m) => m[1])
+          .find((u) => i.haritaDesen!.test(u))
+        if (!bulunan) {
+          return {
+            ad: i.ad, ne: i.ne, url: i.haritaUrl, ok: false, status: h.status, ms: Date.now() - basla,
+            fiyat: null, bas: 'haritada fon adresi bulunamadı', hata: null,
+          }
+        }
+        url = bulunan
+      }
+
+      const r = await fetch(url, {
         ...i.init,
         signal: AbortSignal.timeout(ZAMAN_ASIMI_MS),
         cache: 'no-store',
@@ -170,7 +183,7 @@ export async function fiyatTanisi(semboller: { bist: string; abd: string; fon: s
       })
       const govde = await r.text()
       return {
-        ad: i.ad, ne: i.ne, url: i.url, ok: r.ok, status: r.status, ms: Date.now() - basla,
+        ad: i.ad, ne: i.ne, url, ok: r.ok, status: r.status, ms: Date.now() - basla,
         fiyat: r.ok ? i.oku(govde) : null,
         bas: (i.kanit ? i.kanit(govde) : govde.slice(0, 160)).slice(0, 700),
         hata: null,
