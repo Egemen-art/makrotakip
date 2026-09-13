@@ -110,3 +110,32 @@ export function SecimGrubu<T extends string>({
     </div>
   )
 }
+
+/**
+ * Renk yuvasi atamasi: hayatta kalanlar yuvasini korur, yalnizca yeni gelenler
+ * bostaki en kucuk yuvayi alir. Renk KIMLIGE baglidir, siraya degil — secim ya da
+ * donem degisince mevcut kategoriler yeniden boyanmaz.
+ */
+export function yuvaAta(onceki: Record<string, number>, adlar: string[]) {
+  const yeni: Record<string, number> = {}
+  for (const ad of adlar) if (onceki[ad] !== undefined) yeni[ad] = onceki[ad]
+  const dolu = new Set(Object.values(yeni))
+  for (const ad of adlar) {
+    if (yeni[ad] !== undefined) continue
+    let bos = 0
+    while (dolu.has(bos)) bos++
+    yeni[ad] = bos
+    dolu.add(bos)
+  }
+  // Icerik degismediyse ayni nesne: setState no-op olur, effect dongusu kurulmaz.
+  const eskiAnahtarlar = Object.keys(onceki)
+  const ayniMi =
+    eskiAnahtarlar.length === adlar.length && adlar.every((ad) => onceki[ad] === yeni[ad])
+  return ayniMi ? onceki : yeni
+}
+
+export type YuvaKaydi = {
+  yuvalar: Record<string, number>
+  /** Gorunur kategorilere yuva garanti eder; ortak olanlar rengini korur. */
+  garanti: (adlar: string[]) => void
+}

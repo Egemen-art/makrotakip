@@ -178,6 +178,15 @@ export type AylikKategori = {
   adet: number
 }
 
+/** v_kayit — satir bazinda gider/gelir (arsiv + canli). Gun kirilimi bunu okur. */
+export type GunSatiri = {
+  tarih: string
+  aciklama: string | null
+  tutar: string
+  hesap: string | null
+  bolum: 'arsiv' | 'canli'
+}
+
 export type KategoriSerisi = {
   donem: string
   kategori: string
