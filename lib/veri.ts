@@ -2,6 +2,7 @@ import { supabaseSunucu } from '@/lib/supabase/server'
 import type {
   AylikKategori, AylikOzet, Islem, Kart, KategoriBant, KategoriSerisi, Nakit, PortfoyGetiri, TaksitPlani, Taksonomi, Kural,
 } from '@/lib/tipler'
+import type { PortfoyBugun } from '@/lib/tipler-varlik'
 
 /**
  * Proje Frankfurt'ta (eu-central-1) ve Vercel fonksiyonlari da `fra1`'de.
@@ -17,7 +18,7 @@ export async function panoVerisi(seciliAy: string) {
   const sb = await supabaseSunucu()
 
   const [
-    ozet, hafta, ay, yil, portfoy, kartlar, taksitler, sonIslemler, soruSayisi, bant, altKategoriler, nakit,
+    ozet, hafta, ay, yil, portfoy, kartlar, taksitler, sonIslemler, soruSayisi, bant, altKategoriler, nakit, portfoyBugun,
   ] = await Promise.all([
     sb.from('v_aylik_ozet').select('*').order('ay'),
     sb.rpc('kategori_serisi', { p_bucket: 'hafta' }),
@@ -32,6 +33,8 @@ export async function panoVerisi(seciliAy: string) {
     sb.from('v_aylik_kategori').select('ay,yon,kategori,alt,toplam,adet'),
     // Anlik nakit (karar 49). Aya bagli degil: hangi ay secili olursa olsun BUGUNKU nakit.
     sb.from('v_nakit').select('*').limit(1),
+    // Adet bazli guncel portfoy; anlik goruntu tablosunun yerini almaz.
+    sb.from('v_portfoy_bugun').select('*').limit(1),
   ])
 
   return {
@@ -49,6 +52,7 @@ export async function panoVerisi(seciliAy: string) {
     bant: (bant.data ?? []) as KategoriBant[],
     altKategoriler: (altKategoriler.data ?? []) as AylikKategori[],
     nakit: ((nakit.data ?? [])[0] ?? null) as Nakit | null,
+    portfoyBugun: ((portfoyBugun.data ?? [])[0] ?? null) as PortfoyBugun | null,
     hatalar: [ozet, hafta, ay, yil, portfoy, kartlar, taksitler, sonIslemler, bant, altKategoriler, nakit]
       .map((s) => s.error?.message)
       .filter(Boolean) as string[],

@@ -70,3 +70,22 @@ export type VarlikDeger = {
   fiyat_olculdu: boolean | null
   deger_tl: string | null
 }
+
+/** v_portfoy_bugun — adet x olculen fiyat; olcumun durumu da burada. */
+export type PortfoyBugun = {
+  toplam_tl: string | null
+  kalem: number
+  fiyatsiz_kalem: number
+  elle_kalem: number
+  en_eski_fiyat: string | null
+  en_yeni_fiyat: string | null
+}
+
+/** v_portfoy_sinif — sinif bazinda guncel deger. */
+export type PortfoySinif = {
+  sinif: VarlikSinif
+  deger_tl: string | null
+  yatirilan_tl: string
+  kalem: number
+  fiyatsiz: number
+}

@@ -48,7 +48,11 @@ export default async function Pano({
   const kartBorcu = d.kartlar.reduce((t, k) => t + say(k.ekstre_borcu), 0)
   const kartKullanim = d.kartlar.reduce((t, k) => t + say(k.kullanim_tl), 0)
   const toplamLimit = d.kartlar.reduce((t, k) => t + say(k.limit_tl), 0)
-  const portfoyToplam = say(d.portfoy?.toplam_tl)
+  // Portfoy toplami artik adet x olculen fiyat; olcum yoksa son anlik goruntuye duser.
+  const canliPortfoy = d.portfoyBugun && d.portfoyBugun.kalem > 0
+    ? say(d.portfoyBugun.toplam_tl)
+    : null
+  const portfoyToplam = canliPortfoy ?? say(d.portfoy?.toplam_tl)
   const netPozisyon = portfoyToplam - kartBorcu
 
   const aylikYuk = d.taksitler.reduce((t, p) => t + say(p.aylik_tutar), 0)
@@ -199,8 +203,17 @@ export default async function Pano({
           <ParaSatiri
             ad="Portföy toplamı"
             deger={portfoyToplam}
-            ikincil={d.portfoy ? tarihKisa(d.portfoy.tarih) : undefined}
+            ikincil={
+              canliPortfoy !== null
+                ? `${d.portfoyBugun!.kalem} kalem${d.portfoyBugun!.en_yeni_fiyat ? ` · ${tarihKisa(d.portfoyBugun!.en_yeni_fiyat)}` : ''}`
+                : d.portfoy ? tarihKisa(d.portfoy.tarih) : undefined
+            }
           />
+          {canliPortfoy !== null && d.portfoyBugun!.fiyatsiz_kalem > 0 && (
+            <p className="text-[11px]" style={{ color: 'var(--ciddi)' }}>
+              {d.portfoyBugun!.fiyatsiz_kalem} kalemin fiyatı okunamadı; toplam eksik.
+            </p>
+          )}
           <ParaSatiri ad="Kart ekstre borcu" deger={-kartBorcu} />
           <ParaSatiri ad="Kart kullanımı" deger={-kartKullanim} ikincil="taksitler dahil" />
           <div className="my-1.5" style={{ borderTop: '1px solid var(--hair)' }} />
