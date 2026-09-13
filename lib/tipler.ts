@@ -113,6 +113,18 @@ export type Portfoy = {
   altin_ons_usd: string | null
 }
 
+/**
+ * v_nakit — anlik nakit, karar 49: en son YK guncel bakiyesi + 11.09.2026'dan
+ * itibaren hesap='Nakit' islemlerin neti. Formul tek yerde, view'de.
+ */
+export type Nakit = {
+  yk_bakiye: string
+  yk_tarih: string
+  elde: string
+  toplam: string
+  elde_adet: number
+}
+
 /** finans.hesap_bakiye — banka hesap bakiyesi, gun bazinda. Gorev YK "guncel bakiyesi"ni yazar. */
 export type HesapBakiye = {
   id: number

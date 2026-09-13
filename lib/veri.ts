@@ -1,6 +1,6 @@
 import { supabaseSunucu } from '@/lib/supabase/server'
 import type {
-  AylikKategori, AylikOzet, Islem, Kart, KategoriBant, KategoriSerisi, PortfoyGetiri, TaksitPlani, Taksonomi, Kural,
+  AylikKategori, AylikOzet, Islem, Kart, KategoriBant, KategoriSerisi, Nakit, PortfoyGetiri, TaksitPlani, Taksonomi, Kural,
 } from '@/lib/tipler'
 
 /**
@@ -17,7 +17,7 @@ export async function panoVerisi(seciliAy: string) {
   const sb = await supabaseSunucu()
 
   const [
-    ozet, hafta, ay, yil, portfoy, kartlar, taksitler, sonIslemler, soruSayisi, bant, altKategoriler,
+    ozet, hafta, ay, yil, portfoy, kartlar, taksitler, sonIslemler, soruSayisi, bant, altKategoriler, nakit,
   ] = await Promise.all([
     sb.from('v_aylik_ozet').select('*').order('ay'),
     sb.rpc('kategori_serisi', { p_bucket: 'hafta' }),
@@ -30,6 +30,8 @@ export async function panoVerisi(seciliAy: string) {
     sb.from('islemler').select('id', { count: 'exact', head: true }).eq('durum', 'Soruldu'),
     sb.rpc('kategori_bant', { ref_ay: seciliAy }),
     sb.from('v_aylik_kategori').select('ay,yon,kategori,alt,toplam,adet'),
+    // Anlik nakit (karar 49). Aya bagli degil: hangi ay secili olursa olsun BUGUNKU nakit.
+    sb.from('v_nakit').select('*').limit(1),
   ])
 
   return {
@@ -46,7 +48,8 @@ export async function panoVerisi(seciliAy: string) {
     soruSayisi: soruSayisi.count ?? 0,
     bant: (bant.data ?? []) as KategoriBant[],
     altKategoriler: (altKategoriler.data ?? []) as AylikKategori[],
-    hatalar: [ozet, hafta, ay, yil, portfoy, kartlar, taksitler, sonIslemler, bant, altKategoriler]
+    nakit: ((nakit.data ?? [])[0] ?? null) as Nakit | null,
+    hatalar: [ozet, hafta, ay, yil, portfoy, kartlar, taksitler, sonIslemler, bant, altKategoriler, nakit]
       .map((s) => s.error?.message)
       .filter(Boolean) as string[],
   }

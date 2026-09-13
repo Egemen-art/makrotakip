@@ -3,6 +3,7 @@ import { panoVerisi } from '@/lib/veri'
 import { Istatistik, ParaSatiri } from '@/components/Istatistik'
 import Bolum from '@/components/Bolum'
 import AySecici from '@/components/AySecici'
+import NakitSeridi from '@/components/NakitSeridi'
 import TrendGrafigi from '@/components/grafik/TrendGrafigi'
 import KategoriGrafigi from '@/components/grafik/KategoriGrafigi'
 import { bugun, donemEtiket, tarihKisa, tl, tlKurus } from '@/lib/bicim'
@@ -77,8 +78,13 @@ export default async function Pano({
     .sort((a, b) => (b.simdi - Number(b.esik)) - (a.simdi - Number(a.esik)))
     .slice(0, 5)
 
+  // Nakit aya bagli degil: hangi ay goruntulenirse goruntulensin bugunku rakam.
+  const nakit = d.nakit
+
   return (
     <>
+      {nakit && <NakitSeridi nakit={nakit} />}
+
       {d.hatalar.length > 0 && (
         <div
           className="kart mb-4 p-3 text-[13px]"

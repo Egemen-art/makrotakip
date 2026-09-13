@@ -1,5 +1,5 @@
 import { supabaseSunucu } from '@/lib/supabase/server'
-import type { HesapBakiye, PortfoyGetiri } from '@/lib/tipler'
+import type { Nakit, PortfoyGetiri } from '@/lib/tipler'
 import PortfoyYonetimi from './PortfoyYonetimi'
 import PortfoyAnaliz from './PortfoyAnaliz'
 
@@ -7,13 +7,13 @@ export const dynamic = 'force-dynamic'
 
 export default async function PortfoySayfasi() {
   const sb = await supabaseSunucu()
-  const [{ data, error }, yk] = await Promise.all([
+  const [{ data, error }, nk] = await Promise.all([
     sb.from('v_portfoy_getiri').select('*').order('tarih'),
-    // Nakit on-dolumu: gorevin her sabah yazdigi YK "guncel bakiyesi" (karar 39).
-    sb.from('hesap_bakiye').select('*').eq('hesap', 'YK').order('tarih', { ascending: false }).limit(1),
+    // Nakit elle girilmez: karar 49'un anlik nakti (YK guncel bakiyesi + eldeki nakit).
+    sb.from('v_nakit').select('*').limit(1),
   ])
   const satirlar = (data ?? []) as PortfoyGetiri[]
-  const ykBakiye = ((yk.data ?? [])[0] ?? null) as HesapBakiye | null
+  const nakit = ((nk.data ?? [])[0] ?? null) as Nakit | null
 
   return (
     <>
@@ -30,7 +30,7 @@ export default async function PortfoySayfasi() {
 
       <PortfoyAnaliz satirlar={satirlar} />
 
-      <PortfoyYonetimi satirlar={satirlar} ykBakiye={ykBakiye} />
+      <PortfoyYonetimi satirlar={satirlar} nakit={nakit} />
     </>
   )
 }

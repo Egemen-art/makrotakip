@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState, useTransition } from 'react'
-import type { HesapBakiye, Kurlar, PortfoyGetiri } from '@/lib/tipler'
+import type { Kurlar, Nakit, PortfoyGetiri } from '@/lib/tipler'
 import { bugun, sayiOku, tarihKisa, tl, tlKurus, yuzde } from '@/lib/bicim'
 import { portfoyKaydet, portfoySil, type Birim } from './eylemler'
 
@@ -32,8 +32,10 @@ const BIRIM_ETIKETI: Record<Birim, string> = { TRY: '₺', USD: '$', EUR: '€',
 const girdiMetni = (n: number | null | undefined, basamak = 2) =>
   n === null || n === undefined || !isFinite(n) ? '' : n.toFixed(basamak).replace(/\.?0+$/, '').replace('.', ',')
 
-export default function PortfoyYonetimi({ satirlar, ykBakiye }: { satirlar: PortfoyGetiri[]; ykBakiye: HesapBakiye | null }) {
+export default function PortfoyYonetimi({ satirlar, nakit }: { satirlar: PortfoyGetiri[]; nakit: Nakit | null }) {
   const [acik, setAcik] = useState(false)
+  // Nakit elle girilmez: karar 49'un anlik nakti otomatik dolar. Kacis kapisi olarak elle moda gecilebilir.
+  const [nakitElle, setNakitElle] = useState(false)
   const [hata, setHata] = useState<string | null>(null)
   const [bekliyor, basla] = useTransition()
 
@@ -47,13 +49,15 @@ export default function PortfoyYonetimi({ satirlar, ykBakiye }: { satirlar: Port
     for (const k of KALEMLER) m[k.ad] = girdiMetni(s(k.ad))
     if (son?.altin_gram_tl && s('altin_gram_tl') > 0) m.altin_fiziksel = girdiMetni(s('altin_fiziksel') / s('altin_gram_tl'), 3)
     if (son?.usdtry && s('usdtry') > 0) m.hisse_abd = girdiMetni(s('hisse_abd') / s('usdtry'))
-    // Nakit: gorevin yazdigi en son YK guncel bakiyesi varsa o; yoksa son kayittaki deger.
-    if (ykBakiye) m.nakit = girdiMetni(Number(ykBakiye.bakiye))
+    // Nakit: anlik nakit (YK guncel bakiyesi + eldeki nakit) varsa o; yoksa son kayittaki deger.
+    if (nakit) m.nakit = girdiMetni(Number(nakit.toplam))
     return m
   })
-  const ykGunFarki = ykBakiye
-    ? Math.round((Date.parse(bugun()) - Date.parse(ykBakiye.tarih)) / 86_400_000)
+  // YK bakiyesi kac gun onceki? Gorev her sabah yazar; gecikirse rakam eskir.
+  const ykGunFarki = nakit
+    ? Math.round((Date.parse(bugun()) - Date.parse(nakit.yk_tarih)) / 86_400_000)
     : null
+  const nakitOtomatik = nakit !== null && !nakitElle
   const [birim, setBirim] = useState<Record<Alan, Birim>>(() => {
     const b = {} as Record<Alan, Birim>
     for (const k of KALEMLER) b[k.ad] = k.varsayilan
@@ -177,6 +181,62 @@ export default function PortfoyYonetimi({ satirlar, ykBakiye }: { satirlar: Port
             {KALEMLER.map((k) => {
               const deger = onizleme.p[k.ad]
               const b = birim[k.ad]
+
+              // Nakit zaten olculuyor (karar 49): elle girilmez, otomatik gelir.
+              // Kutu degisse de alttaki dugme AYNI element kalir: mod degistiren dugme
+              // yerine yenisi gelirse ayni tiklama ikinci dugmeye de dusuyor.
+              if (k.ad === 'nakit' && nakit) {
+                return (
+                  <Alan key={k.ad} etiket={k.etiket}>
+                    {nakitOtomatik ? (
+                      <>
+                        <div
+                          className="rakam flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-[13px]"
+                          style={{ ...kutu, background: 'var(--plane)' }}
+                        >
+                          <span style={{ color: Number(nakit.toplam) < 0 ? 'var(--kritik)' : 'var(--ink)' }}>
+                            {tlKurus(nakit.toplam)}
+                          </span>
+                          <span className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>otomatik</span>
+                        </div>
+                        <input type="hidden" name="nakit" value={girdiMetni(Number(nakit.toplam))} />
+                        <input type="hidden" name="nakit_birim" value="TRY" />
+                      </>
+                    ) : (
+                      <div className="flex gap-1">
+                        <input
+                          name="nakit" inputMode="decimal" value={miktar.nakit}
+                          onChange={(e) => setMiktar({ ...miktar, nakit: e.target.value })}
+                          className="rakam w-full min-w-0 rounded-lg px-2 py-1.5 text-[13px]" style={kutu}
+                        />
+                        <select
+                          name="nakit_birim" value={b} aria-label="Nakit birimi"
+                          onChange={(e) => setBirim({ ...birim, nakit: e.target.value as Birim })}
+                          className="shrink-0 rounded-lg px-1.5 py-1.5 text-[12px]" style={kutu}
+                        >
+                          {k.birimler.map((x) => <option key={x} value={x}>{BIRIM_ETIKETI[x]}</option>)}
+                        </select>
+                      </div>
+                    )}
+                    <div className="mt-0.5 flex items-baseline justify-between gap-2 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+                      <span style={{ color: (ykGunFarki ?? 0) > 3 ? 'var(--ciddi)' : 'var(--ink-muted)' }}>
+                        {nakitOtomatik
+                          ? <>YK {tarihKisa(nakit.yk_tarih)}{(ykGunFarki ?? 0) > 3 ? ` · ${ykGunFarki} gün eski` : ''}{Number(nakit.elde) !== 0 ? ` + ${tl(nakit.elde)} elde` : ''}</>
+                          : (b === 'TRY' ? ' ' : deger === null ? 'kur yok' : `= ${tl(deger)}`)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setNakitElle((v) => !v)}
+                        className="shrink-0"
+                        style={{ color: 'var(--seri-1)' }}
+                      >
+                        {nakitOtomatik ? 'elle gir' : `otomatiğe dön (${tlKurus(nakit.toplam)})`}
+                      </button>
+                    </div>
+                  </Alan>
+                )
+              }
+
               return (
                 <Alan key={k.ad} etiket={k.etiket}>
                   <div className="flex gap-1">
@@ -201,12 +261,8 @@ export default function PortfoyYonetimi({ satirlar, ykBakiye }: { satirlar: Port
                     )}
                   </div>
                   <div className="rakam mt-0.5 text-[11px]" style={{ color: deger === null ? 'var(--kritik)' : 'var(--ink-muted)' }}>
-                    {k.ad === 'nakit' && b === 'TRY'
-                      ? (ykBakiye
-                          ? <span style={{ color: (ykGunFarki ?? 0) > 3 ? 'var(--ciddi)' : 'var(--ink-muted)' }}>
-                              YK güncel bakiye · {tarihKisa(ykBakiye.tarih)}{(ykGunFarki ?? 0) > 3 ? ` · ${ykGunFarki} gün eski` : ''}
-                            </span>
-                          : <span>YK bakiyesi henüz yazılmamış · elle gir</span>)
+                    {k.ad === 'nakit' && !nakit
+                      ? 'anlık nakit okunamadı · elle gir'
                       : b === 'TRY' ? ' ' : deger === null ? 'kur yok' : `= ${tl(deger)}`}
                   </div>
                 </Alan>
