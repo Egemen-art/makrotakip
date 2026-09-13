@@ -109,45 +109,43 @@ export function istekler({ bist, abd, fon }: { bist: string; abd: string; fon: s
       url: `https://query1.finance.yahoo.com/v8/finance/chart/${abd}?interval=1d&range=5d`,
       oku: yahooOku,
     },
-    // ── Yatirim fonu (PPF) — fon sayfasi bulundu:
-    // .../fonlarimiz/para-piyasasi-fonlarimiz/tera-portfoy-para-piyasasi-tl-fon-tp2
-    // Fiyat duz metinde degil; sayfanin kendi veri ucunu ariyoruz.
+    // ── Yatirim fonu (PPF) — TP2 sayfasinda pay fiyati biciminde bir sayi var
+    // (2,22949). Degeri degil, ETIKETINI ariyoruz: ayristirici sayiya gore degil
+    // baglama gore yazilmali, yoksa yarin baska bir sayiyi fiyat sanir.
     {
-      ad: 'tp2_veri_ucu', ne: `${fon} sayfasındaki veri uçları`,
+      ad: 'tp2_sayi_baglami', ne: `${fon} — ondalıklı sayıların bağlamı`,
       url: 'https://www.teraportfoy.com/',
       haritaUrl: 'https://www.teraportfoy.com/sitemap.xml',
       haritaDesen: new RegExp(`-${fon}(/|$)`, 'i'),
       oku: () => null,
       kanit: (g) => {
-        const yollar = [...g.matchAll(/["'`]([^"'`\s]*(?:api|\.json|Fiyat|fiyat|Fon\w*Get)[^"'`\s]{0,90})["'`]/g)]
-          .map((m) => m[1])
-          .filter((u) => /\/|\./.test(u) && !/\.(css|png|jpg|svg|woff|ico)/i.test(u))
-        return `uçlar: ${[...new Set(yollar)].slice(0, 18).join(' | ') || 'yok'}`
+        const duz = g.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' | ')
+          .replace(/&#x[0-9a-f]+;/gi, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ')
+        const pencereler: string[] = []
+        for (const m of duz.matchAll(/[0-9]+,[0-9]{4,6}/g)) {
+          pencereler.push(duz.slice(Math.max(0, m.index - 120), m.index + 60))
+          if (pencereler.length >= 3) break
+        }
+        return pencereler.join(' ⟂⟂ ') || 'ondalıklı sayı bulunamadı'
       },
     },
     {
-      ad: 'tp2_fiyat_penceresi', ne: `${fon} sayfasında fiyatın geçtiği yer`,
+      ad: 'tp2_gunluk_getiri', ne: `${fon} — günlük getiri satırı`,
       url: 'https://www.teraportfoy.com/',
       haritaUrl: 'https://www.teraportfoy.com/sitemap.xml',
       haritaDesen: new RegExp(`-${fon}(/|$)`, 'i'),
-      oku: etiketliFiyat,
+      // "Fon Getiri" satirinin ILK yuzdesi gunluk getiridir (Gn Says 1 7 30 ...).
+      oku: (g) => {
+        const duz = g.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ')
+          .replace(/&#x[0-9a-f]+;/gi, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ')
+        const m = duz.match(/Fon Getiri[^%]{0,40}%\s*(-?[0-9]+(?:,[0-9]+)?)/i)
+        return m ? sayi(m[1].replace(',', '.')) : null
+      },
       kanit: (g) => {
         const duz = g.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ')
           .replace(/&#x[0-9a-f]+;/gi, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ')
-        const i = duz.search(/Fon Fiyat|Son Fiyat|Pay De[gğ]er/i)
-        return i >= 0 ? duz.slice(Math.max(0, i - 260), i + 340) : duz.slice(0, 600)
-      },
-    },
-    {
-      ad: 'tp2_script', ne: `${fon} sayfasındaki gömülü veri (script)`,
-      url: 'https://www.teraportfoy.com/',
-      haritaUrl: 'https://www.teraportfoy.com/sitemap.xml',
-      haritaDesen: new RegExp(`-${fon}(/|$)`, 'i'),
-      oku: () => null,
-      kanit: (g) => {
-        const m = g.match(/[0-9]+[.,][0-9]{4,6}/g) ?? []
-        const j = g.search(/fiyat["'\s:]*[0-9]/i)
-        return `4+ ondalıklı sayılar: ${[...new Set(m)].slice(0, 12).join(', ') || 'yok'} · ${j >= 0 ? g.slice(Math.max(0, j - 120), j + 200).replace(/\s+/g, ' ') : 'fiyat:sayı deseni yok'}`
+        const i = duz.search(/Fon Getiri/i)
+        return i >= 0 ? duz.slice(Math.max(0, i - 160), i + 300) : 'Fon Getiri satırı yok'
       },
     },
   ]
