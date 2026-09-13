@@ -4,6 +4,7 @@ import { Istatistik, ParaSatiri } from '@/components/Istatistik'
 import Bolum from '@/components/Bolum'
 import AySecici from '@/components/AySecici'
 import NakitSeridi from '@/components/NakitSeridi'
+import KurSeridi from '@/components/KurSeridi'
 import TrendGrafigi from '@/components/grafik/TrendGrafigi'
 import KategoriGrafigi from '@/components/grafik/KategoriGrafigi'
 import { bugun, donemEtiket, tarihKisa, tl, tlKurus } from '@/lib/bicim'
@@ -84,6 +85,8 @@ export default async function Pano({
   return (
     <>
       {nakit && <NakitSeridi nakit={nakit} />}
+
+      <KurSeridi />
 
       {d.hatalar.length > 0 && (
         <div
