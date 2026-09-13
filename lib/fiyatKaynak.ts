@@ -124,7 +124,7 @@ async function teraFon(kod: string): Promise<Fiyat> {
     const duz = duzMetin(await metin(adres))
     const fiyatEs = duz.match(/Son Güncelleme Tarihi\s*([0-9]+,[0-9]{2,6})/i)
     const tarihEs = duz.match(/([0-9]{1,2}\s+\p{L}+\s+[0-9]{4})\s*Son Güncelleme Tarihi/u)
-    const getiriEs = duz.match(/Günlük Getiri \(%\)\s*%?\s*(-?[0-9]+(?:,[0-9]+)?)/i)
+    const getiriEs = duz.match(/Günlük Getiri[^0-9%+-]{0,24}%?\s*(-?[0-9]+(?:,[0-9]+)?)/i)
 
     const fiyat = fiyatEs ? trSayi(fiyatEs[1]) : null
     return {
