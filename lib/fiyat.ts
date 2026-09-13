@@ -24,7 +24,15 @@ export type KaynakDurumu = {
   hata: string | null
 }
 
-type Istek = { ad: string; ne: string; url: string; init?: RequestInit; oku: (govde: string) => number | null }
+type Istek = {
+  ad: string
+  ne: string
+  url: string
+  init?: RequestInit
+  /** Istekten once cerez almak icin gezilecek sayfa (TEFAS oturum istiyor). */
+  cerezUrl?: string
+  oku: (govde: string) => number | null
+}
 
 const sayi = (v: unknown): number | null => {
   const n = typeof v === 'string' ? Number(v.replace(',', '.')) : typeof v === 'number' ? v : NaN
@@ -39,12 +47,6 @@ function yahooOku(govde: string): number | null {
   } catch { return null }
 }
 
-/** Stooq CSV: basligin altindaki satirda Close 7. sutun. */
-function stooqOku(govde: string): number | null {
-  const satir = govde.trim().split('\n')[1]
-  return satir ? sayi(satir.split(',')[6]) : null
-}
-
 /** TEFAS BindHistoryInfo: data[].FIYAT */
 function tefasOku(govde: string): number | null {
   try {
@@ -52,6 +54,14 @@ function tefasOku(govde: string): number | null {
     const d = Array.isArray(j?.data) ? j.data : []
     return d.length ? sayi(d[d.length - 1]?.FIYAT) : null
   } catch { return null }
+}
+
+/** TEFAS FonAnaliz sayfasi: "Son Fiyat" basliginin altindaki deger. */
+function fonAnalizOku(govde: string): number | null {
+  const m = govde.replace(/\s+/g, ' ').match(/Son Fiyat[^0-9]{0,120}?([0-9]{1,3}(?:[.,][0-9]+)+)/i)
+  if (!m) return null
+  // TR bicimi: binlik nokta, ondalik virgul.
+  return sayi(m[1].replace(/\./g, '').replace(',', '.'))
 }
 
 const gg = (d: Date) => `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`
@@ -75,24 +85,22 @@ export function istekler({ bist, abd, fon }: { bist: string; abd: string; fon: s
       url: `https://query1.finance.yahoo.com/v8/finance/chart/${abd}?interval=1d&range=5d`,
       oku: yahooOku,
     },
+    // ── Yatirim fonu (PPF) — ilk turda TEFAS API'si 404/fault dondu.
+    // Once "TEFAS bizi hic aliyor mu" diye ana sayfa, sonra varyantlar.
     {
-      ad: 'yahoo2_bist', ne: `BİST — ${bist}.IS (ikinci sunucu)`,
-      url: `https://query2.finance.yahoo.com/v8/finance/chart/${bist}.IS?interval=1d&range=5d`,
-      oku: yahooOku,
+      ad: 'tefas_anasayfa', ne: 'TEFAS ana sayfa (erişim testi)',
+      url: 'https://www.tefas.gov.tr/',
+      oku: (g) => (g.toLocaleLowerCase('tr').includes('tefas') ? 1 : null),
     },
     {
-      ad: 'stooq_abd', ne: `ABD hisse — ${abd} (CSV)`,
-      url: `https://stooq.com/q/l/?s=${abd.toLowerCase()}.us&f=sd2t2ohlcv&h&e=csv`,
-      oku: stooqOku,
+      ad: 'tefas_fonanaliz', ne: `TEFAS fon sayfası — ${fon}`,
+      url: `https://www.tefas.gov.tr/FonAnaliz.aspx?FonKod=${fon}`,
+      oku: fonAnalizOku,
     },
     {
-      ad: 'stooq_bist', ne: `BİST — ${bist} (CSV)`,
-      url: `https://stooq.com/q/l/?s=${bist.toLowerCase()}.tr&f=sd2t2ohlcv&h&e=csv`,
-      oku: stooqOku,
-    },
-    {
-      ad: 'tefas', ne: `Yatırım fonu — ${fon}`,
+      ad: 'tefas_post_cerez', ne: `TEFAS API (çerez alarak) — ${fon}`,
       url: 'https://www.tefas.gov.tr/api/DB/BindHistoryInfo',
+      cerezUrl: 'https://www.tefas.gov.tr/TarihselVeriler.aspx',
       init: {
         method: 'POST',
         headers: {
@@ -106,9 +114,14 @@ export function istekler({ bist, abd, fon }: { bist: string; abd: string; fon: s
       oku: tefasOku,
     },
     {
-      ad: 'genelpara_bist', ne: 'BİST toplu liste',
-      url: 'https://api.genelpara.com/embed/borsa.json',
-      oku: (g) => { try { const j = JSON.parse(g); return sayi(j?.[bist]?.satis ?? j?.[bist]?.son) } catch { return null } },
+      ad: 'tefas_get', ne: `TEFAS API (GET) — ${fon}`,
+      url: `https://www.tefas.gov.tr/api/DB/BindHistoryInfo?${tefasGovde.toString()}`,
+      oku: tefasOku,
+    },
+    {
+      ad: 'yahoo_fon', ne: `Yahoo'da fon kodu — ${fon}.IS`,
+      url: `https://query1.finance.yahoo.com/v8/finance/chart/${fon}.IS?interval=1d&range=5d`,
+      oku: yahooOku,
     },
   ]
 }
@@ -118,6 +131,17 @@ export async function fiyatTanisi(semboller: { bist: string; abd: string; fon: s
   return Promise.all(istekler(semboller).map(async (i): Promise<KaynakDurumu> => {
     const basla = Date.now()
     try {
+      // Cerez isteyen uclar icin once sayfayi gez, donen cerezi tasi.
+      let cerez = ''
+      if (i.cerezUrl) {
+        const c = await fetch(i.cerezUrl, {
+          signal: AbortSignal.timeout(ZAMAN_ASIMI_MS),
+          cache: 'no-store',
+          headers: { 'user-agent': 'Mozilla/5.0 (compatible; finans-takip/1.0)' },
+        })
+        cerez = (c.headers.getSetCookie?.() ?? []).map((k) => k.split(';')[0]).join('; ')
+      }
+
       const r = await fetch(i.url, {
         ...i.init,
         signal: AbortSignal.timeout(ZAMAN_ASIMI_MS),
@@ -125,6 +149,7 @@ export async function fiyatTanisi(semboller: { bist: string; abd: string; fon: s
         headers: {
           accept: '*/*',
           'user-agent': 'Mozilla/5.0 (compatible; finans-takip/1.0)',
+          ...(cerez ? { cookie: cerez } : {}),
           ...(i.init?.headers as Record<string, string> | undefined),
         },
       })
