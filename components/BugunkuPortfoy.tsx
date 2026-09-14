@@ -10,7 +10,7 @@ import { tarihKisa, tl, usd, yuzde } from '@/lib/bicim'
  * eksiktir ve bu soylenir; elle girilen kalem sayisi da gorunur.
  */
 export default function BugunkuPortfoy({
-  ozet, siniflar, para = 'TRY', usdtry = null, kurTarihi = null,
+  ozet, siniflar, para = 'TRY', usdtry = null, kurTarihi = null, performans = [],
 }: {
   ozet: PortfoyBugun
   siniflar: PortfoySinif[]
