@@ -166,6 +166,7 @@ export default function PortfoyPerformansGorunumu({
                     <span className="rakam w-12 shrink-0 text-right text-[12px]" style={{ color: 'var(--ink-muted)' }}>
                       {yuzde(g.deger / toplamDeger)}
                     </span>
+                    <span className="w-20 shrink-0" aria-hidden />
                   </button>
 
                   {/* Dilim secildi: grubun kalemleri, her birinin kendi getirisiyle */}
@@ -176,6 +177,9 @@ export default function PortfoyPerformansGorunumu({
                         const p = sonGetiri.get(u.varlik_id)
                         const kv = p ? (dolar ? p.kumulatif_yuzde_usd : p.kumulatif_yuzde) : null
                         const k = kv === null || kv === undefined ? null : Number(kv)
+                        const uDeger = cevir(Number(u.deger_tl))
+                        // Tek olcum varsa getiri henuz yok: "%0" degil "ilk gun" — pay sanilmasin.
+                        const ilkGun = !!p && p.tarih === p.baslangic
                         return (
                           <li key={u.varlik_id}>
                             <button
@@ -188,12 +192,16 @@ export default function PortfoyPerformansGorunumu({
                                 {u.kod}
                                 <span className="ml-1.5 text-[11px]" style={{ color: 'var(--ink-muted)' }}>{SINIF_ETIKETI[u.sinif]}</span>
                               </span>
-                              <span className="rakam ml-auto shrink-0">{bicim(cevir(Number(u.deger_tl)))}</span>
+                              <span className="rakam ml-auto shrink-0">{bicim(uDeger)}</span>
+                              <span className="rakam w-12 shrink-0 text-right text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+                                {toplamDeger > 0 ? yuzde(uDeger / toplamDeger) : '—'}
+                              </span>
                               <span
-                                className="rakam w-16 shrink-0 text-right text-[11px]"
-                                style={{ color: k === null ? 'var(--ink-muted)' : k > 0 ? 'var(--artis-iyi)' : k < 0 ? 'var(--kritik)' : 'var(--ink-muted)' }}
+                                className="rakam w-20 shrink-0 text-right text-[11px]"
+                                title="Kümülatif getiri (para akışlarından arındırılmış)"
+                                style={{ color: k === null || ilkGun ? 'var(--ink-muted)' : k > 0 ? 'var(--artis-iyi)' : k < 0 ? 'var(--kritik)' : 'var(--ink-muted)' }}
                               >
-                                {kv === null || kv === undefined ? '—' : yuzdeMetni(kv)}
+                                {kv === null || kv === undefined ? '—' : ilkGun ? 'ilk gün' : `getiri ${yuzdeMetni(kv)}`}
                               </span>
                             </button>
                           </li>
