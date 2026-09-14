@@ -129,8 +129,13 @@ export type VarlikPerformans = {
   miktar: string
   deger_tl: string | null
   akis_tl: string | null
+  usdtry: string | null
+  deger_usd: string | null
+  akis_usd: string | null
   gun_yuzde: string | null
   kumulatif_yuzde: string | null
+  gun_yuzde_usd: string | null
+  kumulatif_yuzde_usd: string | null
   baslangic: string
 }
 
@@ -139,6 +144,13 @@ export type PortfoyPerformans = {
   tarih: string
   deger_tl: string | null
   akis_tl: string | null
+  usdtry: string | null
+  deger_usd: string | null
+  akis_usd: string | null
   gun_yuzde: string | null
   kumulatif_yuzde: string | null
+  gun_yuzde_usd: string | null
+  kumulatif_yuzde_usd: string | null
 }
+
+export type Para = 'TRY' | 'USD'

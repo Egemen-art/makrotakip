@@ -1,7 +1,7 @@
 import Link from 'next/link'
-import type { PortfoyBugun, PortfoySinif } from '@/lib/tipler-varlik'
+import type { Para, PortfoyBugun, PortfoySinif } from '@/lib/tipler-varlik'
 import { GRUP_ETIKETI, SINIF_ETIKETI, SINIF_GRUBU } from '@/lib/tipler-varlik'
-import { tarihKisa, tl, yuzde } from '@/lib/bicim'
+import { tarihKisa, tl, usd, yuzde } from '@/lib/bicim'
 
 /**
  * Bugunku portfoy: adet x olculen fiyat (finans.varlik + fiyat).
@@ -10,12 +10,20 @@ import { tarihKisa, tl, yuzde } from '@/lib/bicim'
  * eksiktir ve bu soylenir; elle girilen kalem sayisi da gorunur.
  */
 export default function BugunkuPortfoy({
-  ozet, siniflar,
+  ozet, siniflar, para = 'TRY', usdtry = null, kurTarihi = null,
 }: {
   ozet: PortfoyBugun
   siniflar: PortfoySinif[]
+  para?: Para
+  /** Gunun USD/TRY kuru; dolar gorunumunde bugunku degerler bununla cevrilir. */
+  usdtry?: number | null
+  kurTarihi?: string | null
 }) {
-  const toplam = Number(ozet.toplam_tl ?? 0)
+  // Dolar gorunumu ama kur yok: TL'de kal ve soyle — yaklasik kur uydurulmaz.
+  const dolar = para === 'USD' && usdtry !== null && usdtry > 0
+  const cevir = (n: number) => (dolar ? n / usdtry! : n)
+  const bicim = dolar ? usd : tl
+  const toplam = cevir(Number(ozet.toplam_tl ?? 0))
 
   // Once ust grup (Altin, Hisse...), altinda kategoriler. Tek kategorili
   // grupta alt satir tekrar olur, gosterilmez.
@@ -28,7 +36,7 @@ export default function BugunkuPortfoy({
     .map(([grup, uyeler]) => ({
       grup,
       uyeler: [...uyeler].sort((a, b) => Number(b.deger_tl ?? 0) - Number(a.deger_tl ?? 0)),
-      deger: uyeler.reduce((t, u) => t + Number(u.deger_tl ?? 0), 0),
+      deger: cevir(uyeler.reduce((t, u) => t + Number(u.deger_tl ?? 0), 0)),
       olculdu: uyeler.some((u) => u.deger_tl !== null),
     }))
     .sort((a, b) => b.deger - a.deger)
@@ -38,12 +46,14 @@ export default function BugunkuPortfoy({
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <div className="flex items-baseline gap-3">
           <span className="text-[12px]" style={{ color: 'var(--ink-muted)' }}>Bugünkü portföy</span>
-          <span className="rakam text-[22px] font-semibold leading-tight">{tl(toplam)}</span>
+          <span className="rakam text-[22px] font-semibold leading-tight">{bicim(toplam)}</span>
         </div>
         <span className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
           {ozet.kalem} kalem
           {ozet.en_yeni_fiyat && ` · fiyatlar ${tarihKisa(ozet.en_yeni_fiyat)}`}
           {ozet.elle_kalem > 0 && ` · ${ozet.elle_kalem} kalem elle`}
+          {dolar && ` · USD/TRY ${usdtry!.toFixed(4)}${kurTarihi ? ` (${tarihKisa(kurTarihi)})` : ''}`}
+          {para === 'USD' && !dolar && ' · kur yok, ₺ gösteriliyor'}
         </span>
       </div>
 
@@ -68,7 +78,7 @@ export default function BugunkuPortfoy({
                 />
               </span>
               <span className="rakam text-right font-medium" style={{ color: g.olculdu ? undefined : 'var(--ciddi)' }}>
-                {g.olculdu ? tl(g.deger) : 'fiyat yok'}
+                {g.olculdu ? bicim(g.deger) : 'fiyat yok'}
               </span>
               <span className="rakam w-12 text-right" style={{ color: 'var(--ink-muted)' }}>
                 {g.olculdu && toplam > 0 ? yuzde(g.deger / toplam) : '—'}
@@ -78,7 +88,7 @@ export default function BugunkuPortfoy({
             {/* Grup birden fazla kategori tasiyorsa kirilimi da goster. */}
             {g.uyeler.length > 1 && g.uyeler.map((u) => {
               const olculdu = u.deger_tl !== null
-              const deger = Number(u.deger_tl ?? 0)
+              const deger = cevir(Number(u.deger_tl ?? 0))
               return (
                 <div
                   key={u.sinif}
@@ -87,7 +97,7 @@ export default function BugunkuPortfoy({
                 >
                   <span className="truncate">{SINIF_ETIKETI[u.sinif] ?? u.sinif}</span>
                   <span aria-hidden />
-                  <span className="rakam text-right">{olculdu ? tl(deger) : 'fiyat yok'}</span>
+                  <span className="rakam text-right">{olculdu ? bicim(deger) : 'fiyat yok'}</span>
                   <span className="rakam w-12 text-right">
                     {olculdu && toplam > 0 ? yuzde(deger / toplam) : '—'}
                   </span>

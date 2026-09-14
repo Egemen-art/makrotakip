@@ -4,9 +4,9 @@ import { useMemo, useState } from 'react'
 import {
   Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid,
 } from 'recharts'
-import type { PortfoyPerformans, VarlikDeger, VarlikPerformans } from '@/lib/tipler-varlik'
+import type { Para, PortfoyPerformans, VarlikDeger, VarlikPerformans } from '@/lib/tipler-varlik'
 import { GRUP_ETIKETI, SINIF_ETIKETI, SINIF_GRUBU } from '@/lib/tipler-varlik'
-import { donemEtiket, tarihKisa, tl, yuzde } from '@/lib/bicim'
+import { donemEtiket, tarihKisa, tl, usd, yuzde } from '@/lib/bicim'
 import { EKSEN_STILI, SERI_RENKLERI } from './grafik/ortak'
 
 /**
@@ -28,14 +28,20 @@ const yuzdeMetni = (v: string | null | undefined) => {
 }
 
 export default function PortfoyPerformansGorunumu({
-  degerler, toplam, kalemler,
+  degerler, toplam, kalemler, para = 'TRY', usdtry = null,
 }: {
   degerler: VarlikDeger[]
   toplam: PortfoyPerformans[]
   kalemler: VarlikPerformans[]
+  para?: Para
+  /** Gunun kuru: bugunku dagilim bununla cevrilir. Performans zinciri her gunun kendi kuruyla gelir. */
+  usdtry?: number | null
 }) {
   const [grup, setGrup] = useState<string | null>(null)
   const [varlikId, setVarlikId] = useState<number | null>(null)
+  const dolar = para === 'USD' && usdtry !== null && usdtry > 0
+  const cevir = (n: number) => (dolar ? n / usdtry! : n)
+  const bicim = dolar ? usd : tl
 
   const gruplar = useMemo(() => {
     const t = new Map<string, { deger: number; uyeler: VarlikDeger[] }>()
@@ -43,14 +49,15 @@ export default function PortfoyPerformansGorunumu({
       if (Number(d.miktar) === 0 || d.deger_tl === null) continue
       const g = SINIF_GRUBU[d.sinif] ?? 'diger'
       const kayit = t.get(g) ?? { deger: 0, uyeler: [] }
-      kayit.deger += Number(d.deger_tl)
+      kayit.deger += cevir(Number(d.deger_tl))
       kayit.uyeler.push(d)
       t.set(g, kayit)
     }
     return [...t.entries()]
       .map(([ad, k]) => ({ ad, deger: k.deger, uyeler: k.uyeler.sort((a, b) => Number(b.deger_tl) - Number(a.deger_tl)) }))
       .sort((a, b) => b.deger - a.deger)
-  }, [degerler])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [degerler, dolar, usdtry])
   const toplamDeger = gruplar.reduce((t, g) => t + g.deger, 0)
 
   // Kalem bazinda son kumulatif getiri — listede yanina yazilir.
@@ -75,13 +82,21 @@ export default function PortfoyPerformansGorunumu({
       return kalemler
         .filter((k) => k.varlik_id === varlikId)
         .sort((a, b) => a.tarih.localeCompare(b.tarih))
-        .map((k) => ({ tarih: k.tarih, yuzde: Number(k.kumulatif_yuzde ?? 0), deger: Number(k.deger_tl ?? 0) }))
+        .map((k) => ({
+          tarih: k.tarih,
+          yuzde: Number((dolar ? k.kumulatif_yuzde_usd : k.kumulatif_yuzde) ?? 0),
+          deger: Number((dolar ? k.deger_usd : k.deger_tl) ?? 0),
+        }))
     }
     return toplam
       .slice()
       .sort((a, b) => a.tarih.localeCompare(b.tarih))
-      .map((t) => ({ tarih: t.tarih, yuzde: Number(t.kumulatif_yuzde ?? 0), deger: Number(t.deger_tl ?? 0) }))
-  }, [varlikId, kalemler, toplam])
+      .map((t) => ({
+        tarih: t.tarih,
+        yuzde: Number((dolar ? t.kumulatif_yuzde_usd : t.kumulatif_yuzde) ?? 0),
+        deger: Number((dolar ? t.deger_usd : t.deger_tl) ?? 0),
+      }))
+  }, [varlikId, kalemler, toplam, dolar])
   const son = seri.at(-1)
   const seciliVarlik = varlikId === null ? null : degerler.find((d) => d.varlik_id === varlikId) ?? null
   const cizgiRengi = seciliVarlik ? grupRengi(SINIF_GRUBU[seciliVarlik.sinif] ?? 'diger') : 'var(--seri-1)'
@@ -93,6 +108,7 @@ export default function PortfoyPerformansGorunumu({
         <h2 className="text-[15px] font-semibold">Dağılım ve performans</h2>
         <span className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
           Getiri para akışlarından arındırılmış; eklediğin para kazanç, çektiğin kayıp sayılmaz.
+          {dolar && ' Dolar zinciri her günü kendi kuruyla çevirir.'}
         </span>
       </div>
 
@@ -121,7 +137,7 @@ export default function PortfoyPerformansGorunumu({
                     const p = payload[0]
                     return (
                       <div className="kart px-3 py-2 text-[12px] shadow-lg" style={{ background: 'var(--surface)' }}>
-                        {GRUP_ETIKETI[String(p.name)] ?? p.name} · <span className="rakam font-medium">{tl(Number(p.value))}</span>
+                        {GRUP_ETIKETI[String(p.name)] ?? p.name} · <span className="rakam font-medium">{bicim(Number(p.value))}</span>
                       </div>
                     )
                   }}
@@ -130,7 +146,7 @@ export default function PortfoyPerformansGorunumu({
             </ResponsiveContainer>
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
               <span className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>toplam</span>
-              <span className="rakam text-[16px] font-semibold leading-tight">{tl(toplamDeger)}</span>
+              <span className="rakam text-[16px] font-semibold leading-tight">{bicim(toplamDeger)}</span>
             </div>
           </div>
 
@@ -146,7 +162,7 @@ export default function PortfoyPerformansGorunumu({
                   >
                     <span aria-hidden className="inline-block h-2 w-2 shrink-0 self-center rounded-full" style={{ background: grupRengi(g.ad) }} />
                     <span className="truncate" style={{ fontWeight: bu ? 600 : 400 }}>{GRUP_ETIKETI[g.ad] ?? g.ad}</span>
-                    <span className="rakam ml-auto shrink-0 font-medium">{tl(g.deger)}</span>
+                    <span className="rakam ml-auto shrink-0 font-medium">{bicim(g.deger)}</span>
                     <span className="rakam w-12 shrink-0 text-right text-[12px]" style={{ color: 'var(--ink-muted)' }}>
                       {yuzde(g.deger / toplamDeger)}
                     </span>
@@ -158,7 +174,8 @@ export default function PortfoyPerformansGorunumu({
                       {g.uyeler.map((u) => {
                         const secili = varlikId === u.varlik_id
                         const p = sonGetiri.get(u.varlik_id)
-                        const k = p ? Number(p.kumulatif_yuzde ?? 0) : null
+                        const kv = p ? (dolar ? p.kumulatif_yuzde_usd : p.kumulatif_yuzde) : null
+                        const k = kv === null || kv === undefined ? null : Number(kv)
                         return (
                           <li key={u.varlik_id}>
                             <button
@@ -171,12 +188,12 @@ export default function PortfoyPerformansGorunumu({
                                 {u.kod}
                                 <span className="ml-1.5 text-[11px]" style={{ color: 'var(--ink-muted)' }}>{SINIF_ETIKETI[u.sinif]}</span>
                               </span>
-                              <span className="rakam ml-auto shrink-0">{tl(Number(u.deger_tl))}</span>
+                              <span className="rakam ml-auto shrink-0">{bicim(cevir(Number(u.deger_tl)))}</span>
                               <span
                                 className="rakam w-16 shrink-0 text-right text-[11px]"
                                 style={{ color: k === null ? 'var(--ink-muted)' : k > 0 ? 'var(--artis-iyi)' : k < 0 ? 'var(--kritik)' : 'var(--ink-muted)' }}
                               >
-                                {p ? yuzdeMetni(p.kumulatif_yuzde) : '—'}
+                                {kv === null || kv === undefined ? '—' : yuzdeMetni(kv)}
                               </span>
                             </button>
                           </li>
@@ -197,6 +214,7 @@ export default function PortfoyPerformansGorunumu({
           <p className="text-[12px]" style={{ color: 'var(--ink-2)' }}>
             <span aria-hidden className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle" style={{ background: cizgiRengi }} />
             {seciliVarlik ? `${seciliVarlik.kod} · kümülatif getiri` : seciliGrup ? `Toplam portföy · kümülatif getiri (grup için kalem seç)` : 'Toplam portföy · kümülatif getiri'}
+            <span className="ml-1.5 text-[11px]" style={{ color: 'var(--ink-muted)' }}>{dolar ? '$ bazında' : '₺ bazında'}</span>
             {seri.length > 0 && (
               <span className="ml-2 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
                 {tarihKisa(seri[0].tarih)}&apos;den beri · {seri.length} ölçüm
@@ -231,7 +249,7 @@ export default function PortfoyPerformansGorunumu({
                     return (
                       <div className="kart px-3 py-2 text-[12px] shadow-lg" style={{ background: 'var(--surface)' }}>
                         <div className="font-medium">{donemEtiket(String(label)) === String(label) ? tarihKisa(String(label)) : tarihKisa(String(label))}</div>
-                        <div className="rakam">{yuzdeMetni(String(p.yuzde))} · {tl(p.deger)}</div>
+                        <div className="rakam">{yuzdeMetni(String(p.yuzde))} · {bicim(p.deger)}</div>
                       </div>
                     )
                   }}
