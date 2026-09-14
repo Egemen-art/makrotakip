@@ -180,11 +180,17 @@ export async function kurTarihli(para: 'USD' | 'EUR', tarih: string): Promise<nu
   }
 }
 
-/** Nakit: karar 49'un formulu zaten finans.v_nakit'te; oradan okunur. */
-async function nakit(): Promise<Fiyat> {
-  const { supabaseSunucu } = await import('@/lib/supabase/server')
-  const sb = await supabaseSunucu()
-  const { data, error } = await sb.from('v_nakit').select('toplam, yk_tarih').limit(1).single()
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Istemci = { from: (t: string) => any }
+
+/** Nakit: karar 49'un formulu zaten finans.v_nakit'te; oradan okunur.
+ *  Istemci disaridan gelir: ekranda oturum, cron'da servis anahtari. */
+async function nakit(sb?: Istemci): Promise<Fiyat> {
+  if (!sb) {
+    const { supabaseSunucu } = await import('@/lib/supabase/server')
+    sb = await supabaseSunucu()
+  }
+  const { data, error } = await sb!.from('v_nakit').select('toplam, yk_tarih').limit(1).single()
   if (error || !data) {
     return { fiyat: null, para: null, tarih: null, kaynak: 'v_nakit', hata: error?.message ?? 'nakit okunamadı' }
   }
@@ -199,13 +205,13 @@ async function nakit(): Promise<Fiyat> {
   }
 }
 
-export async function fiyatOku(kaynak: FiyatKaynagi): Promise<Fiyat> {
+export async function fiyatOku(kaynak: FiyatKaynagi, sb?: Istemci): Promise<Fiyat> {
   switch (kaynak.tur) {
     case 'bist': return yahoo(`${kaynak.sembol}.IS`, 'TRY')
     case 'abd': return yahoo(kaynak.sembol, 'USD')
     case 'fon': return teraFon(kaynak.kod)
     case 'gram_altin': return gramAltin()
-    case 'nakit': return nakit()
+    case 'nakit': return nakit(sb)
   }
 }
 
