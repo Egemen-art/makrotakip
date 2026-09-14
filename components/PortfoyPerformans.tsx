@@ -241,7 +241,9 @@ export default function PortfoyPerformansGorunumu({
 
         {seri.length < 2 ? (
           <p className="py-6 text-center text-[12px]" style={{ color: 'var(--ink-muted)' }}>
-            {seri.length === 0 ? 'Henüz ölçüm yok — "Fiyatları güncelle" ilk ölçümü yazar.' : 'İlk ölçüm alındı; çizgi ikinci ölçümle başlar.'}
+            {seri.length === 0
+              ? 'Henüz ölçüm yok — "Fiyatları güncelle" ilk ölçümü yazar.'
+              : `Başlangıç ölçümü ${tarihKisa(seri[0].tarih)}. Getiri her sabah alınan ölçümle bir önceki güne göre hesaplanır; çizgi yarınki ölçümle başlar.`}
           </p>
         ) : (
           <div className="mt-2 h-[220px] w-full">

@@ -59,7 +59,14 @@ export default async function PortfoySayfasi({
       {ozet && ozet.kalem > 0 ? (
         <>
           <div className="mt-3">
-            <BugunkuPortfoy ozet={ozet} siniflar={(siniflar.data ?? []) as PortfoySinif[]} para={para} usdtry={usdtry} kurTarihi={kurTarihi} />
+            <BugunkuPortfoy
+              ozet={ozet}
+              siniflar={(siniflar.data ?? []) as PortfoySinif[]}
+              para={para}
+              usdtry={usdtry}
+              kurTarihi={kurTarihi}
+              performans={(toplam.data ?? []) as PortfoyPerformans[]}
+            />
           </div>
           <div className="mt-4">
             <PortfoyPerformansGorunumu

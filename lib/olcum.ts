@@ -93,6 +93,9 @@ export async function gunlukOlcum(sb: Istemci): Promise<OlcumSonucu> {
       usdtry: sonKur?.usdtry ?? null,
       deger_tl: Number(d.deger_tl),
       olculdu: d.fiyat_olculdu !== false,
+      // Akis penceresi bu zamana gore kurulur: onceki olcumden sonra kaydedilen
+      // hareketler bu olcumun akisidir. Ayni gun yeniden olculunce yenilenir.
+      olcum_zamani: new Date().toISOString(),
     }))
   let olcum = 'yazılacak kalem yok'
   if (satirlar.length > 0) {

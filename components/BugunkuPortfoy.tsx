@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import type { Para, PortfoyBugun, PortfoySinif } from '@/lib/tipler-varlik'
+import type { Para, PortfoyBugun, PortfoyPerformans, PortfoySinif } from '@/lib/tipler-varlik'
 import { GRUP_ETIKETI, SINIF_ETIKETI, SINIF_GRUBU } from '@/lib/tipler-varlik'
 import { tarihKisa, tl, usd, yuzde } from '@/lib/bicim'
 
@@ -18,12 +18,24 @@ export default function BugunkuPortfoy({
   /** Gunun USD/TRY kuru; dolar gorunumunde bugunku degerler bununla cevrilir. */
   usdtry?: number | null
   kurTarihi?: string | null
+  /** Gunluk zincir: son satirin gun/kumulatif getirisi baslikta gosterilir. */
+  performans?: PortfoyPerformans[]
 }) {
   // Dolar gorunumu ama kur yok: TL'de kal ve soyle — yaklasik kur uydurulmaz.
   const dolar = para === 'USD' && usdtry !== null && usdtry > 0
   const cevir = (n: number) => (dolar ? n / usdtry! : n)
   const bicim = dolar ? usd : tl
   const toplam = cevir(Number(ozet.toplam_tl ?? 0))
+
+  // Gidisat: son olcumun bir onceki olcume gore degisimi ve baslangictan beri.
+  const zincir = [...(performans ?? [])].sort((a, b) => a.tarih.localeCompare(b.tarih))
+  const son = zincir.at(-1) ?? null
+  const gunYuzde = son ? Number((dolar ? son.gun_yuzde_usd : son.gun_yuzde) ?? 0) : null
+  const kumYuzde = son ? Number((dolar ? son.kumulatif_yuzde_usd : son.kumulatif_yuzde) ?? 0) : null
+  const olcumSayisi = zincir.length
+  const yuzdeMetni = (n: number) =>
+    `${n > 0 ? '+' : ''}${new Intl.NumberFormat('tr-TR', { maximumFractionDigits: 2 }).format(n)} %`
+  const renk = (n: number) => (n > 0 ? 'var(--artis-iyi)' : n < 0 ? 'var(--kritik)' : 'var(--ink-muted)')
 
   // Once ust grup (Altin, Hisse...), altinda kategoriler. Tek kategorili
   // grupta alt satir tekrar olur, gosterilmez.
@@ -56,6 +68,26 @@ export default function BugunkuPortfoy({
           {para === 'USD' && !dolar && ' · kur yok, ₺ gösteriliyor'}
         </span>
       </div>
+
+      {/* Gidisat satiri: ilk olcumde getiri yoktur, bunu acikca soyle. */}
+      <p className="mt-1 text-[12px]" style={{ color: 'var(--ink-2)' }}>
+        {olcumSayisi >= 2 && gunYuzde !== null && kumYuzde !== null ? (
+          <>
+            Son ölçüme göre <span className="rakam font-medium" style={{ color: renk(gunYuzde) }}>{yuzdeMetni(gunYuzde)}</span>
+            {' · '}başlangıçtan beri <span className="rakam font-medium" style={{ color: renk(kumYuzde) }}>{yuzdeMetni(kumYuzde)}</span>
+            <span className="ml-1.5 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+              ({olcumSayisi} ölçüm, {zincir[0] ? tarihKisa(zincir[0].tarih) : ''}&apos;den beri · para akışları hariç)
+            </span>
+          </>
+        ) : olcumSayisi === 1 ? (
+          <span style={{ color: 'var(--ink-muted)' }}>
+            Başlangıç ölçümü alındı ({tarihKisa(zincir[0].tarih)}). Getiri bir sonraki günün ölçümüyle başlar;
+            gün içi alım-satım bugünkü değere yansır ama getiri sayılmaz.
+          </span>
+        ) : (
+          <span style={{ color: 'var(--ink-muted)' }}>Henüz ölçüm yok.</span>
+        )}
+      </p>
 
       {ozet.fiyatsiz_kalem > 0 && (
         <p className="mt-1 text-[11px]" style={{ color: 'var(--ciddi)' }}>
