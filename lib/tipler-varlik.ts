@@ -154,3 +154,44 @@ export type PortfoyPerformans = {
 }
 
 export type Para = 'TRY' | 'USD'
+
+/** v_portfoy_olcum_performans — olcumden olcume zincir (gun ici ekran). */
+export type PortfoyOlcumPerformans = {
+  olcum_zamani: string
+  tarih: string
+  onceki_olcum: string | null
+  kalem: number
+  deger_tl: string | null
+  onceki_deger: string | null
+  akis_tl: string | null
+  usdtry: string | null
+  deger_usd: string | null
+  onceki_deger_usd: string | null
+  akis_usd: string | null
+  adim_yuzde: string | null
+  adim_yuzde_usd: string | null
+}
+
+/** v_varlik_olcum_performans — kalem bazinda olcumden olcume. */
+export type VarlikOlcumPerformans = {
+  varlik_id: number
+  kod: string
+  sinif: VarlikSinif
+  tarih: string
+  olcum_zamani: string
+  onceki_olcum: string | null
+  onceki_tarih: string | null
+  miktar: string
+  deger_tl: string | null
+  onceki_deger: string | null
+  akis_tl: string | null
+  usdtry: string | null
+  deger_usd: string | null
+  onceki_deger_usd: string | null
+  akis_usd: string | null
+  adim_yuzde: string | null
+  adim_yuzde_usd: string | null
+}
+
+/** varlik_hareket + varligin kodu (para akislari tablosu). */
+export type HareketKaydi = VarlikHareket & { varlik: { kod: string; sinif: VarlikSinif } | null }

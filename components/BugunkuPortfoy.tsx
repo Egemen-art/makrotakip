@@ -73,7 +73,7 @@ export default function BugunkuPortfoy({
       <p className="mt-1 text-[12px]" style={{ color: 'var(--ink-2)' }}>
         {olcumSayisi >= 2 && gunYuzde !== null && kumYuzde !== null ? (
           <>
-            Son ölçüme göre <span className="rakam font-medium" style={{ color: renk(gunYuzde) }}>{yuzdeMetni(gunYuzde)}</span>
+            Önceki güne göre <span className="rakam font-medium" style={{ color: renk(gunYuzde) }}>{yuzdeMetni(gunYuzde)}</span>
             {' · '}başlangıçtan beri <span className="rakam font-medium" style={{ color: renk(kumYuzde) }}>{yuzdeMetni(kumYuzde)}</span>
             <span className="ml-1.5 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
               ({olcumSayisi} ölçüm, {zincir[0] ? tarihKisa(zincir[0].tarih) : ''}&apos;den beri · para akışları hariç)

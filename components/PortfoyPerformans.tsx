@@ -4,17 +4,21 @@ import { useMemo, useState } from 'react'
 import {
   Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid,
 } from 'recharts'
-import type { Para, PortfoyPerformans, VarlikDeger, VarlikPerformans } from '@/lib/tipler-varlik'
+import type {
+  Para, PortfoyOlcumPerformans, PortfoyPerformans, VarlikDeger, VarlikOlcumPerformans, VarlikPerformans,
+} from '@/lib/tipler-varlik'
 import { GRUP_ETIKETI, SINIF_ETIKETI, SINIF_GRUBU } from '@/lib/tipler-varlik'
-import { donemEtiket, tarihKisa, tl, usd, yuzde } from '@/lib/bicim'
+import { tarihKisa, tl, usd, yuzde } from '@/lib/bicim'
+import { donemBasligi, donemGetirisi, donemZinciri, type Donem } from '@/lib/donem'
 import { EKSEN_STILI, SERI_RENKLERI } from './grafik/ortak'
+import GunIci from './GunIci'
 
 /**
  * Portfoy dagilimi (pasta) + SENIN performansin (TWR).
  * Pasta gruplara gore; dilime tiklayinca o grubun kalemleri, kaleme
- * tiklayinca o kalemin getirisi. Alttaki cizgi secili olanin kumulatif
- * getirisi: toplam portfoy, bir grup degil — grup getirisi tutulmuyor —
- * ya da tek kalem.
+ * tiklayinca o kalemin getirisi. Alttaki cizgi secili olanin SECILI DONEMDEKI
+ * getirisi (lib/donem): toplam portfoy, bir grup degil — grup getirisi
+ * tutulmuyor — ya da tek kalem. Gun gorunumunde cizgi yerine gun ici olcumler.
  */
 
 // Renk KIMLIGE bagli: grup sirasi sabit, ekranda hangi gruplar varsa olsun.
@@ -28,11 +32,14 @@ const yuzdeMetni = (v: string | null | undefined) => {
 }
 
 export default function PortfoyPerformansGorunumu({
-  degerler, toplam, kalemler, para = 'TRY', usdtry = null,
+  degerler, toplam, kalemler, donem, gunIci, para = 'TRY', usdtry = null,
 }: {
   degerler: VarlikDeger[]
   toplam: PortfoyPerformans[]
   kalemler: VarlikPerformans[]
+  donem: Donem
+  /** Gun gorunumunde: secili gunun olcumleri (olcumden olcume zincir). */
+  gunIci?: { toplam: PortfoyOlcumPerformans[]; kalemler: VarlikOlcumPerformans[] }
   para?: Para
   /** Gunun kuru: bugunku dagilim bununla cevrilir. Performans zinciri her gunun kendi kuruyla gelir. */
   usdtry?: number | null
@@ -60,15 +67,23 @@ export default function PortfoyPerformansGorunumu({
   }, [degerler, dolar, usdtry])
   const toplamDeger = gruplar.reduce((t, g) => t + g.deger, 0)
 
-  // Kalem bazinda son kumulatif getiri — listede yanina yazilir.
-  const sonGetiri = useMemo(() => {
-    const m = new Map<number, VarlikPerformans>()
-    for (const k of kalemler) {
-      const eski = m.get(k.varlik_id)
-      if (!eski || k.tarih > eski.tarih) m.set(k.varlik_id, k)
+  const gunlukR = (k: { gun_yuzde: string | null; gun_yuzde_usd: string | null }) =>
+    Number((dolar ? k.gun_yuzde_usd : k.gun_yuzde) ?? 0)
+  const gunlukDeger = (k: { deger_tl: string | null; deger_usd: string | null }) =>
+    Number((dolar ? k.deger_usd : k.deger_tl) ?? 0)
+
+  // Kalem bazinda DONEM getirisi — listede yanina yazilir. Gun gorunumunde o
+  // gunun getirisi (onceki gunun son olcumune gore); null = donemde olcum yok.
+  const donemGetirileri = useMemo(() => {
+    const m = new Map<number, number | null>()
+    const gruplu = new Map<number, VarlikPerformans[]>()
+    for (const k of kalemler) gruplu.set(k.varlik_id, [...(gruplu.get(k.varlik_id) ?? []), k])
+    for (const [id, satirlar] of gruplu) {
+      m.set(id, donemGetirisi(donemZinciri(satirlar, donem, gunlukR, gunlukDeger)))
     }
     return m
-  }, [kalemler])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kalemler, donem, dolar])
 
   function grupSec(ad: string | undefined) {
     if (!ad) return
@@ -76,28 +91,14 @@ export default function PortfoyPerformansGorunumu({
     setVarlikId(null)
   }
 
-  // Cizgi: secili kalem varsa onun zinciri, yoksa toplam.
+  // Cizgi: secili kalem varsa onun donem kesiti, yoksa toplam portfoyunki.
   const seri = useMemo(() => {
-    if (varlikId !== null) {
-      return kalemler
-        .filter((k) => k.varlik_id === varlikId)
-        .sort((a, b) => a.tarih.localeCompare(b.tarih))
-        .map((k) => ({
-          tarih: k.tarih,
-          yuzde: Number((dolar ? k.kumulatif_yuzde_usd : k.kumulatif_yuzde) ?? 0),
-          deger: Number((dolar ? k.deger_usd : k.deger_tl) ?? 0),
-        }))
-    }
-    return toplam
-      .slice()
-      .sort((a, b) => a.tarih.localeCompare(b.tarih))
-      .map((t) => ({
-        tarih: t.tarih,
-        yuzde: Number((dolar ? t.kumulatif_yuzde_usd : t.kumulatif_yuzde) ?? 0),
-        deger: Number((dolar ? t.deger_usd : t.deger_tl) ?? 0),
-      }))
-  }, [varlikId, kalemler, toplam, dolar])
+    const satirlar = varlikId !== null ? kalemler.filter((k) => k.varlik_id === varlikId) : toplam
+    return donemZinciri(satirlar, donem, gunlukR, gunlukDeger)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [varlikId, kalemler, toplam, donem, dolar])
   const son = seri.at(-1)
+  const donemAdi = donemBasligi(donem)
   const seciliVarlik = varlikId === null ? null : degerler.find((d) => d.varlik_id === varlikId) ?? null
   const cizgiRengi = seciliVarlik ? grupRengi(SINIF_GRUBU[seciliVarlik.sinif] ?? 'diger') : 'var(--seri-1)'
   const seciliGrup = grup ? gruplar.find((g) => g.ad === grup) ?? null : null
@@ -174,12 +175,8 @@ export default function PortfoyPerformansGorunumu({
                     <ul className="mb-1 ml-2 border-l pl-2" style={{ borderColor: 'var(--hair)' }}>
                       {g.uyeler.map((u) => {
                         const secili = varlikId === u.varlik_id
-                        const p = sonGetiri.get(u.varlik_id)
-                        const kv = p ? (dolar ? p.kumulatif_yuzde_usd : p.kumulatif_yuzde) : null
-                        const k = kv === null || kv === undefined ? null : Number(kv)
+                        const k = donemGetirileri.get(u.varlik_id) ?? null
                         const uDeger = cevir(Number(u.deger_tl))
-                        // Tek olcum varsa getiri henuz yok: "%0" degil "ilk gun" — pay sanilmasin.
-                        const ilkGun = !!p && p.tarih === p.baslangic
                         return (
                           <li key={u.varlik_id}>
                             <button
@@ -198,10 +195,10 @@ export default function PortfoyPerformansGorunumu({
                               </span>
                               <span
                                 className="rakam w-20 shrink-0 text-right text-[11px]"
-                                title="Kümülatif getiri (para akışlarından arındırılmış)"
-                                style={{ color: k === null || ilkGun ? 'var(--ink-muted)' : k > 0 ? 'var(--artis-iyi)' : k < 0 ? 'var(--kritik)' : 'var(--ink-muted)' }}
+                                title={`Getiri, ${donemAdi} (para akışlarından arındırılmış)`}
+                                style={{ color: k === null ? 'var(--ink-muted)' : k > 0 ? 'var(--artis-iyi)' : k < 0 ? 'var(--kritik)' : 'var(--ink-muted)' }}
                               >
-                                {kv === null || kv === undefined ? '—' : ilkGun ? 'ilk gün' : `getiri ${yuzdeMetni(kv)}`}
+                                {k === null ? 'ölçüm yok' : `getiri ${yuzdeMetni(String(k))}`}
                               </span>
                             </button>
                           </li>
@@ -216,58 +213,64 @@ export default function PortfoyPerformansGorunumu({
         </div>
       )}
 
-      {/* ── Performans cizgisi ─────────────────────────────────────────── */}
+      {/* ── Performans: gun gorunumunde gun ici olcumler, digerinde donem cizgisi ── */}
       <div className="mt-4 pt-3" style={{ borderTop: '1px solid var(--hair)' }}>
-        <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <p className="text-[12px]" style={{ color: 'var(--ink-2)' }}>
-            <span aria-hidden className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle" style={{ background: cizgiRengi }} />
-            {seciliVarlik ? `${seciliVarlik.kod} · kümülatif getiri` : seciliGrup ? `Toplam portföy · kümülatif getiri (grup için kalem seç)` : 'Toplam portföy · kümülatif getiri'}
-            <span className="ml-1.5 text-[11px]" style={{ color: 'var(--ink-muted)' }}>{dolar ? '$ bazında' : '₺ bazında'}</span>
-            {seri.length > 0 && (
-              <span className="ml-2 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
-                {tarihKisa(seri[0].tarih)}&apos;den beri · {seri.length} ölçüm
-              </span>
-            )}
-          </p>
-          {son && (
-            <span
-              className="rakam text-[17px] font-semibold"
-              style={{ color: son.yuzde > 0 ? 'var(--artis-iyi)' : son.yuzde < 0 ? 'var(--kritik)' : 'var(--ink)' }}
-            >
-              {yuzdeMetni(String(son.yuzde))}
-            </span>
-          )}
-        </div>
-
-        {seri.length < 2 ? (
-          <p className="py-6 text-center text-[12px]" style={{ color: 'var(--ink-muted)' }}>
-            {seri.length === 0
-              ? 'Henüz ölçüm yok — "Fiyatları güncelle" ilk ölçümü yazar.'
-              : `Başlangıç ölçümü ${tarihKisa(seri[0].tarih)}. Getiri her sabah alınan ölçümle bir önceki güne göre hesaplanır; çizgi yarınki ölçümle başlar.`}
-          </p>
+        {donem.kod === 'gun' && gunIci ? (
+          <GunIci gun={donem.gun} toplam={gunIci.toplam} kalemler={gunIci.kalemler} para={para} />
         ) : (
-          <div className="mt-2 h-[220px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={seri} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-                <CartesianGrid stroke="var(--grid)" vertical={false} />
-                <XAxis dataKey="tarih" tickFormatter={(t) => tarihKisa(t).replace(/ \d{4}$/, '')} tick={EKSEN_STILI} tickLine={false} axisLine={{ stroke: 'var(--axis)' }} minTickGap={24} />
-                <YAxis tickFormatter={(v) => `${v} %`} tick={EKSEN_STILI} tickLine={false} axisLine={false} width={52} />
-                <Tooltip
-                  content={({ active, payload, label }) => {
-                    if (!active || !payload?.length) return null
-                    const p = payload[0].payload as { yuzde: number; deger: number }
-                    return (
-                      <div className="kart px-3 py-2 text-[12px] shadow-lg" style={{ background: 'var(--surface)' }}>
-                        <div className="font-medium">{donemEtiket(String(label)) === String(label) ? tarihKisa(String(label)) : tarihKisa(String(label))}</div>
-                        <div className="rakam">{yuzdeMetni(String(p.yuzde))} · {bicim(p.deger)}</div>
-                      </div>
-                    )
-                  }}
-                />
-                <Line type="monotone" dataKey="yuzde" stroke={cizgiRengi} strokeWidth={2} dot={seri.length < 20} isAnimationActive={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+          <>
+            <div className="flex flex-wrap items-baseline justify-between gap-3">
+              <p className="text-[12px]" style={{ color: 'var(--ink-2)' }}>
+                <span aria-hidden className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle" style={{ background: cizgiRengi }} />
+                {seciliVarlik ? `${seciliVarlik.kod} · getiri` : seciliGrup ? 'Toplam portföy · getiri (grup için kalem seç)' : 'Toplam portföy · getiri'}
+                <span className="ml-1.5 text-[11px]" style={{ color: 'var(--ink-muted)' }}>{donemAdi} · {dolar ? '$ bazında' : '₺ bazında'}</span>
+                {seri.length > 0 && (
+                  <span className="ml-2 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+                    {tarihKisa(seri[0].tarih)} → {tarihKisa(seri[seri.length - 1].tarih)} · {seri.length} ölçüm
+                  </span>
+                )}
+              </p>
+              {son && seri.length >= 2 && (
+                <span
+                  className="rakam text-[17px] font-semibold"
+                  style={{ color: son.yuzde > 0 ? 'var(--artis-iyi)' : son.yuzde < 0 ? 'var(--kritik)' : 'var(--ink)' }}
+                >
+                  {yuzdeMetni(String(son.yuzde))}
+                </span>
+              )}
+            </div>
+
+            {seri.length < 2 ? (
+              <p className="py-6 text-center text-[12px]" style={{ color: 'var(--ink-muted)' }}>
+                {seri.length === 0
+                  ? 'Bu aralıkta ölçüm yok.'
+                  : `Bu aralıkta tek ölçüm var (${tarihKisa(seri[0].tarih)}); getiri bir sonraki günün ölçümüyle başlar.`}
+              </p>
+            ) : (
+              <div className="mt-2 h-[220px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={seri} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                    <CartesianGrid stroke="var(--grid)" vertical={false} />
+                    <XAxis dataKey="tarih" tickFormatter={(t) => tarihKisa(t).replace(/ \d{4}$/, '')} tick={EKSEN_STILI} tickLine={false} axisLine={{ stroke: 'var(--axis)' }} minTickGap={24} />
+                    <YAxis tickFormatter={(v) => `${v} %`} tick={EKSEN_STILI} tickLine={false} axisLine={false} width={52} />
+                    <Tooltip
+                      content={({ active, payload, label }) => {
+                        if (!active || !payload?.length) return null
+                        const p = payload[0].payload as { yuzde: number; deger: number }
+                        return (
+                          <div className="kart px-3 py-2 text-[12px] shadow-lg" style={{ background: 'var(--surface)' }}>
+                            <div className="font-medium">{tarihKisa(String(label))}</div>
+                            <div className="rakam">{yuzdeMetni(String(p.yuzde))} · {bicim(p.deger)}</div>
+                          </div>
+                        )
+                      }}
+                    />
+                    <Line type="monotone" dataKey="yuzde" stroke={cizgiRengi} strokeWidth={2} dot={seri.length < 20} isAnimationActive={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
