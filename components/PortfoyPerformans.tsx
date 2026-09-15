@@ -10,15 +10,17 @@ import type {
 import { GRUP_ETIKETI, SINIF_ETIKETI, SINIF_GRUBU } from '@/lib/tipler-varlik'
 import { tarihKisa, tl, usd, yuzde } from '@/lib/bicim'
 import { donemBasligi, donemGetirisi, donemZinciri, type Donem } from '@/lib/donem'
+import { gunlukZincir, olcumZinciri } from '@/lib/zincir'
 import { EKSEN_STILI, SERI_RENKLERI } from './grafik/ortak'
 import GunIci from './GunIci'
 
 /**
  * Portfoy dagilimi (pasta) + SENIN performansin (TWR).
  * Pasta gruplara gore; dilime tiklayinca o grubun kalemleri, kaleme
- * tiklayinca o kalemin getirisi. Alttaki cizgi secili olanin SECILI DONEMDEKI
- * getirisi (lib/donem): toplam portfoy, bir grup degil — grup getirisi
- * tutulmuyor — ya da tek kalem. Gun gorunumunde cizgi yerine gun ici olcumler.
+ * tiklayinca o kalemin getirisi. Alttaki cizgi NE SECILIYSE onun secili
+ * donemdeki getirisi: toplam portfoy, bir grup (kalemleri toplanip zincir
+ * kurulur, lib/zincir) ya da tek kalem. Gun gorunumunde cizgi yerine o
+ * gunun olcumleri — o da secime gore suzulur.
  */
 
 // Renk KIMLIGE bagli: grup sirasi sabit, ekranda hangi gruplar varsa olsun.
@@ -85,23 +87,59 @@ export default function PortfoyPerformansGorunumu({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kalemler, donem, dolar])
 
+  // Grup bazinda DONEM getirisi: kalemlerin degeri ve akisi gun gun toplanip
+  // ayni TWR formulu uygulanir (lib/zincir) — grup zinciri veritabaninda yok.
+  const grupGetirileri = useMemo(() => {
+    const gruplu = new Map<string, VarlikPerformans[]>()
+    for (const k of kalemler) {
+      const g = SINIF_GRUBU[k.sinif] ?? 'diger'
+      gruplu.set(g, [...(gruplu.get(g) ?? []), k])
+    }
+    const m = new Map<string, number | null>()
+    for (const [g, satirlar] of gruplu) {
+      m.set(g, donemGetirisi(donemZinciri(gunlukZincir(satirlar, dolar), donem, (z) => z.r, (z) => z.deger)))
+    }
+    return m
+  }, [kalemler, donem, dolar])
+
   function grupSec(ad: string | undefined) {
     if (!ad) return
     setGrup((g) => (g === ad ? null : ad))
     setVarlikId(null)
   }
 
-  // Cizgi: secili kalem varsa onun donem kesiti, yoksa toplam portfoyunki.
+  // Cizgi: ne secildiyse onun donem kesiti — kalem, grup ya da toplam portfoy.
   const seri = useMemo(() => {
-    const satirlar = varlikId !== null ? kalemler.filter((k) => k.varlik_id === varlikId) : toplam
-    return donemZinciri(satirlar, donem, gunlukR, gunlukDeger)
+    if (varlikId === null && grup === null) {
+      return donemZinciri(toplam, donem, gunlukR, gunlukDeger)
+    }
+    const uyeler = kalemler.filter((k) =>
+      varlikId !== null ? k.varlik_id === varlikId : (SINIF_GRUBU[k.sinif] ?? 'diger') === grup)
+    return donemZinciri(gunlukZincir(uyeler, dolar), donem, (z) => z.r, (z) => z.deger)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [varlikId, kalemler, toplam, donem, dolar])
+  }, [varlikId, grup, kalemler, toplam, donem, dolar])
+
+  // Gun gorunumu de secime uyar: o gunun olcumleri secilen kalem/grup icin.
+  const gunIciSecili = useMemo(() => {
+    if (!gunIci) return undefined
+    if (varlikId === null && grup === null) return gunIci
+    const uyeler = gunIci.kalemler.filter((k) =>
+      varlikId !== null ? k.varlik_id === varlikId : (SINIF_GRUBU[k.sinif] ?? 'diger') === grup)
+    return { toplam: olcumZinciri(uyeler), kalemler: uyeler }
+  }, [gunIci, varlikId, grup])
   const son = seri.at(-1)
   const donemAdi = donemBasligi(donem)
   const seciliVarlik = varlikId === null ? null : degerler.find((d) => d.varlik_id === varlikId) ?? null
-  const cizgiRengi = seciliVarlik ? grupRengi(SINIF_GRUBU[seciliVarlik.sinif] ?? 'diger') : 'var(--seri-1)'
   const seciliGrup = grup ? gruplar.find((g) => g.ad === grup) ?? null : null
+  const seciliGrupAdi = seciliVarlik
+    ? SINIF_GRUBU[seciliVarlik.sinif] ?? 'diger'
+    : seciliGrup?.ad ?? null
+  const cizgiRengi = seciliGrupAdi ? grupRengi(seciliGrupAdi) : 'var(--seri-1)'
+  const secimAdi = seciliVarlik
+    ? seciliVarlik.kod
+    : seciliGrup
+      ? GRUP_ETIKETI[seciliGrup.ad] ?? seciliGrup.ad
+      : null
 
   return (
     <div className="kart p-4">
@@ -167,7 +205,18 @@ export default function PortfoyPerformansGorunumu({
                     <span className="rakam w-12 shrink-0 text-right text-[12px]" style={{ color: 'var(--ink-muted)' }}>
                       {yuzde(g.deger / toplamDeger)}
                     </span>
-                    <span className="w-20 shrink-0" aria-hidden />
+                    {(() => {
+                      const gr = grupGetirileri.get(g.ad) ?? null
+                      return (
+                        <span
+                          className="rakam w-20 shrink-0 text-right text-[11px]"
+                          title={`Grubun getirisi, ${donemAdi} (para akışlarından arındırılmış)`}
+                          style={{ color: gr === null ? 'var(--ink-muted)' : gr > 0 ? 'var(--artis-iyi)' : gr < 0 ? 'var(--kritik)' : 'var(--ink-muted)' }}
+                        >
+                          {gr === null ? 'ölçüm yok' : yuzdeMetni(String(gr))}
+                        </span>
+                      )
+                    })()}
                   </button>
 
                   {/* Dilim secildi: grubun kalemleri, her birinin kendi getirisiyle */}
@@ -215,14 +264,14 @@ export default function PortfoyPerformansGorunumu({
 
       {/* ── Performans: gun gorunumunde gun ici olcumler, digerinde donem cizgisi ── */}
       <div className="mt-4 pt-3" style={{ borderTop: '1px solid var(--hair)' }}>
-        {donem.kod === 'gun' && gunIci ? (
-          <GunIci gun={donem.gun} toplam={gunIci.toplam} kalemler={gunIci.kalemler} para={para} />
+        {donem.kod === 'gun' && gunIciSecili ? (
+          <GunIci gun={donem.gun} toplam={gunIciSecili.toplam} kalemler={gunIciSecili.kalemler} para={para} secimAdi={secimAdi} />
         ) : (
           <>
             <div className="flex flex-wrap items-baseline justify-between gap-3">
               <p className="text-[12px]" style={{ color: 'var(--ink-2)' }}>
                 <span aria-hidden className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle" style={{ background: cizgiRengi }} />
-                {seciliVarlik ? `${seciliVarlik.kod} · getiri` : seciliGrup ? 'Toplam portföy · getiri (grup için kalem seç)' : 'Toplam portföy · getiri'}
+                {secimAdi ? `${secimAdi} · getiri` : 'Toplam portföy · getiri'}
                 <span className="ml-1.5 text-[11px]" style={{ color: 'var(--ink-muted)' }}>{donemAdi} · {dolar ? '$ bazında' : '₺ bazında'}</span>
                 {seri.length > 0 && (
                   <span className="ml-2 text-[11px]" style={{ color: 'var(--ink-muted)' }}>

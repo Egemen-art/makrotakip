@@ -27,12 +27,14 @@ const renk = (n: number) => (n > 0 ? 'var(--artis-iyi)' : n < 0 ? 'var(--kritik)
 const zincirle = (adimlar: number[]) => (adimlar.reduce((c, r) => c * (1 + r / 100), 1) - 1) * 100
 
 export default function GunIci({
-  gun, toplam, kalemler, para = 'TRY',
+  gun, toplam, kalemler, para = 'TRY', secimAdi = null,
 }: {
   gun: string
   toplam: PortfoyOlcumPerformans[]
   kalemler: VarlikOlcumPerformans[]
   para?: Para
+  /** Pastada bir grup ya da kalem secildiyse adi; baslikta yazilir. */
+  secimAdi?: string | null
 }) {
   const dolar = para === 'USD'
   const bicim = dolar ? usd : tl
@@ -77,7 +79,7 @@ export default function GunIci({
   if (olcumler.length === 0) {
     return (
       <p className="py-6 text-center text-[12px]" style={{ color: 'var(--ink-muted)' }}>
-        {tarihKisa(gun)} için ölçüm yok. Ölçümler 09:30, 15:30 ve 18:30&apos;da alınır; &quot;Fiyatları güncelle&quot; de bir ölçüm yazar.
+        {secimAdi ? `${secimAdi} için ` : ''}{tarihKisa(gun)} tarihinde ölçüm yok. Ölçümler 09:30, 15:30 ve 18:30&apos;da alınır; &quot;Fiyatları güncelle&quot; de bir ölçüm yazar.
       </p>
     )
   }
@@ -86,7 +88,7 @@ export default function GunIci({
     <div>
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <p className="text-[12px]" style={{ color: 'var(--ink-2)' }}>
-          Gün içi ölçümler · {tarihKisa(gun)}
+          {secimAdi ? `${secimAdi} · gün içi` : 'Gün içi ölçümler'} · {tarihKisa(gun)}
           <span className="ml-1.5 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
             {olcumler.length} ölçüm · {dolar ? '$ bazında' : '₺ bazında'} · farklar para akışından arındırılmış
           </span>
