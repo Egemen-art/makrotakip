@@ -43,9 +43,10 @@ export default function TaksitAkisi({
   yansiyan: YansiyanTaksit[]
   bugun: string
   kompakt?: boolean
-  baslangic?: Suzgec
+  baslangic?: Suzgec | null
 }) {
-  const [suzgec, setSuzgec] = useState<Suzgec>(baslangic)
+  // Ayni kutuya ikinci tiklama suzgeci kapatir; tablo gizlenir.
+  const [suzgec, setSuzgec] = useState<Suzgec | null>(baslangic)
   const buAy = bugun.slice(0, 7)
 
   const bekleyenSatir = (b: BekleyenTaksit): Satir => ({
@@ -69,7 +70,7 @@ export default function TaksitAkisi({
     tumu: bekleyen.map(bekleyenSatir),
     gecikmis: gecikmis.map(bekleyenSatir),
   }
-  const listelenen = kumeler[suzgec]
+  const listelenen = suzgec === null ? [] : kumeler[suzgec]
 
   const kutular: { kod: Suzgec; ad: string; tutar: number; adet: number; alt: string; renk?: string }[] = [
     { kod: 'buay', ad: 'Bu ay yansıyacak', tutar: toplam(buAyBekleyen), adet: buAyBekleyen.length, alt: 'gidere henüz girmedi' },
@@ -94,7 +95,7 @@ export default function TaksitAkisi({
           const aktif = suzgec === k.kod
           return (
             <button
-              key={k.kod} type="button" onClick={() => setSuzgec(k.kod)} aria-pressed={aktif}
+              key={k.kod} type="button" onClick={() => setSuzgec((s) => (s === k.kod ? null : k.kod))} aria-pressed={aktif}
               className={`kart text-left hover:bg-[var(--plane)] ${kompakt ? 'px-3 py-2' : 'p-4'}`}
               style={{ borderColor: aktif ? 'var(--seri-1)' : k.renk, boxShadow: aktif ? '0 0 0 1px var(--seri-1)' : undefined }}
             >
@@ -106,7 +107,9 @@ export default function TaksitAkisi({
         })}
       </div>
 
-      {listelenen.length === 0 ? (
+      {suzgec === null ? (
+        <p className="mt-2 text-[11px]" style={{ color: 'var(--ink-muted)' }}>Ayrıntı için bir kutuya tıkla.</p>
+      ) : listelenen.length === 0 ? (
         <p className={`text-center text-[12px] ${kompakt ? 'py-3' : 'kart mt-3 p-6 text-[13px]'}`} style={{ color: 'var(--ink-muted)' }}>
           Bu kümede taksit yok.
         </p>

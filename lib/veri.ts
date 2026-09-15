@@ -27,7 +27,8 @@ export async function panoVerisi(seciliAy: string) {
     sb.rpc('kategori_serisi', { p_bucket: 'yil' }),
     sb.from('v_portfoy_getiri').select('*').order('tarih', { ascending: false }).limit(1),
     sb.from('kartlar').select('*').order('kod'),
-    sb.from('taksit_plani').select('*').eq('durum', 'Aktif').order('aylik_tutar', { ascending: false }),
+    // Bitmemis tum planlar (Dogrulanmadi dahil — o da kesimde yazilacak; ekranda isaretlenir).
+    sb.from('taksit_plani').select('*').neq('durum', 'Bitti').order('aylik_tutar', { ascending: false }),
     sb.from('islemler').select('*').order('tarih', { ascending: false }).order('id', { ascending: false }).limit(15),
     sb.from('islemler').select('id', { count: 'exact', head: true }).eq('durum', 'Soruldu'),
     sb.rpc('kategori_bant', { ref_ay: seciliAy }),

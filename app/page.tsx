@@ -245,7 +245,7 @@ export default async function Pano({
 
         <Bolum
           baslik="Sabit aylık yükler"
-          aciklama={`${d.taksitler.length} aktif taksit planı`}
+          aciklama={`${d.taksitler.length} süren taksit planı`}
           baglanti={{ yol: '/taksitler', ad: 'Taksitler' }}
         >
           <div className="mb-2 flex items-baseline justify-between">
@@ -259,12 +259,13 @@ export default async function Pano({
             <TaksitAkisi bekleyen={bekleyenTaksit} yansiyan={yansiyanTaksit} bugun={gunBugun} kompakt />
           </div>
           <ul>
-            {d.taksitler.slice(0, 6).map((p) => (
+            {d.taksitler.map((p) => (
               <li key={p.id} className="flex items-baseline justify-between gap-3 py-1">
                 <span className="truncate text-[13px]" style={{ color: 'var(--ink-2)' }}>
                   {p.urun}
                   <span className="ml-1.5 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
                     {p.odenen_taksit}/{p.taksit_sayisi}
+                    {p.durum === 'Doğrulanmadı' && <span style={{ color: 'var(--ciddi)' }}> · doğrulanmadı</span>}
                   </span>
                 </span>
                 <span className="rakam shrink-0 text-[13px]">{tl(p.aylik_tutar)}</span>
