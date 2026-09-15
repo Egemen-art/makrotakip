@@ -24,7 +24,7 @@ const fiyatMetni = (f: string | null, para: string | null) =>
   f === null ? 'fiyat yok' : (FIYAT[para ?? 'TRY'] ?? FIYAT.TRY).format(Number(f))
 
 const DONEM_SUTUNU: Record<SeritDonemi, keyof VarlikGetiri> = {
-  gun: 'gun_yuzde', hafta: 'hafta_yuzde', ay: 'ay_yuzde', '6ay': 'alti_ay_yuzde',
+  gun: 'gun_yuzde', hafta: 'hafta_yuzde', ay: 'ay_yuzde', '3ay': 'uc_ay_yuzde', '6ay': 'alti_ay_yuzde',
 }
 
 export default function VarlikSeridi({

@@ -3,6 +3,7 @@ export const SERIT_DONEMLERI = [
   { kod: 'gun', ad: 'Gün', gunSayisi: 1 },
   { kod: 'hafta', ad: 'Hafta', gunSayisi: 7 },
   { kod: 'ay', ad: 'Ay', gunSayisi: 30 },
+  { kod: '3ay', ad: '3 Ay', gunSayisi: 90 },
   { kod: '6ay', ad: '6 Ay', gunSayisi: 182 },
 ] as const
 export type SeritDonemi = (typeof SERIT_DONEMLERI)[number]['kod']
