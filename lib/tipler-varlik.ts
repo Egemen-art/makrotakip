@@ -118,6 +118,7 @@ export type VarlikGetiri = {
   uc_ay_yuzde: string | null
   yil_yuzde: string | null
   ilk_fiyat_tarihi: string | null
+  alti_ay_yuzde: string | null
 }
 
 /** v_varlik_performans — kalem bazinda gunluk TWR zinciri. */

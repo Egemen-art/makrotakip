@@ -19,7 +19,7 @@ export async function panoVerisi(seciliAy: string) {
 
   const [
     ozet, hafta, ay, yil, portfoy, kartlar, taksitler, sonIslemler, soruSayisi, bant, altKategoriler, nakit, portfoyBugun,
-    varlikDegerleri, varlikGetirileri,
+    varlikDegerleri, varlikGetirileri, sonKur,
   ] = await Promise.all([
     sb.from('v_aylik_ozet').select('*').order('ay'),
     sb.rpc('kategori_serisi', { p_bucket: 'hafta' }),
@@ -38,7 +38,9 @@ export async function panoVerisi(seciliAy: string) {
     sb.from('v_portfoy_bugun').select('*').limit(1),
     // Kalem bazinda anlik deger ve gunluk yuzde (pano ustundeki varlik seridi).
     sb.from('v_varlik_deger').select('*'),
-    sb.from('v_varlik_getiri').select('varlik_id, fiyat_tarihi, son_fiyat, para, gun_yuzde, hafta_yuzde, ay_yuzde, uc_ay_yuzde, yil_yuzde, ilk_fiyat_tarihi'),
+    sb.from('v_varlik_getiri').select('*'),
+    // Gunun kuru: varlik seridinin dolar gorunumu bununla cevrilir.
+    sb.from('kur_gunluk').select('tarih, usdtry').order('tarih', { ascending: false }).limit(1).maybeSingle(),
   ])
 
   return {
@@ -59,6 +61,7 @@ export async function panoVerisi(seciliAy: string) {
     portfoyBugun: ((portfoyBugun.data ?? [])[0] ?? null) as PortfoyBugun | null,
     varlikDegerleri: (varlikDegerleri.data ?? []) as VarlikDeger[],
     varlikGetirileri: (varlikGetirileri.data ?? []) as VarlikGetiri[],
+    sonKur: sonKur.data ? { tarih: sonKur.data.tarih as string, usdtry: Number(sonKur.data.usdtry) } : null,
     hatalar: [ozet, hafta, ay, yil, portfoy, kartlar, taksitler, sonIslemler, bant, altKategoriler, nakit]
       .map((s) => s.error?.message)
       .filter(Boolean) as string[],

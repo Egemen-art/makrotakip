@@ -237,6 +237,14 @@ export async function fiyatGecmisi(
     return { satirlar: [], para: null, hata: 'bu kaynakta geçmiş serisi yok' }
   }
   const sembol = kaynak.tur === 'bist' ? `${kaynak.sembol}.IS` : kaynak.sembol
+  return yahooSerisi(sembol, aralik)
+}
+
+/** Yahoo gunluk kapanis serisi — hisse, kur (TRY=X, EURUSD=X) ve ons (XAUUSD=X) icin ayni uc. */
+export async function yahooSerisi(
+  sembol: string,
+  aralik: '1mo' | '3mo' | '6mo' | '1y' | '2y' = '1y',
+): Promise<{ satirlar: { tarih: string; fiyat: number }[]; para: 'TRY' | 'USD' | null; hata: string | null }> {
   try {
     const j = JSON.parse(await metin(
       `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sembol)}?interval=1d&range=${aralik}`,
