@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { supabaseSunucu } from '@/lib/supabase/server'
 import type { Kart, TaksitPlani } from '@/lib/tipler'
 import { bugun, tarihKisa, tl, tlKurus } from '@/lib/bicim'
@@ -14,7 +15,8 @@ const YUK_RENGI: Record<string, string> = {
   Belirsiz: 'var(--uyari)',
 }
 
-export default async function TaksitlerSayfasi() {
+export default async function TaksitlerSayfasi({ searchParams }: { searchParams: Promise<{ bekleyen?: string }> }) {
+  const { bekleyen: filtre } = await searchParams
   const sb = await supabaseSunucu()
   const [{ data, error }, kartlar, yazilanlar] = await Promise.all([
     sb.from('taksit_plani').select('*').order('durum').order('aylik_tutar', { ascending: false }),
@@ -33,6 +35,13 @@ export default async function TaksitlerSayfasi() {
   )
   const buAy = bekleyen.filter((b) => b.ay === gunBugun.slice(0, 7))
   const gecikmis = bekleyen.filter((b) => b.gecikmis)
+  // Kutuya tiklayinca tablo suzulur (?bekleyen=buay | gecikmis); tekrar tiklayinca acilir.
+  const suzgec = filtre === 'buay' ? 'buay' : filtre === 'gecikmis' ? 'gecikmis' : null
+  const listelenen = suzgec === 'buay' ? buAy : suzgec === 'gecikmis' ? gecikmis : bekleyen
+  const kutuStil = (aktif: boolean, renk?: string) => ({
+    borderColor: aktif ? 'var(--seri-1)' : renk,
+    boxShadow: aktif ? '0 0 0 1px var(--seri-1)' : undefined,
+  })
   const aktif = planlar.filter((p) => p.durum === 'Aktif')
   const aylikToplam = aktif.reduce((t, p) => t + say(p.aylik_tutar), 0)
   const kalanToplam = aktif.reduce((t, p) => t + say(p.aylik_tutar) * p.kalan_taksit, 0)
@@ -158,30 +167,30 @@ export default async function TaksitlerSayfasi() {
         </span>
       </div>
       <div className="mt-2 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <div className="kart p-4">
+        <Link href={suzgec === 'buay' ? '/taksitler' : '/taksitler?bekleyen=buay'} className="kart block p-4 hover:bg-[var(--plane)]" style={kutuStil(suzgec === 'buay')} aria-pressed={suzgec === 'buay'}>
           <div className="text-[12px]" style={{ color: 'var(--ink-muted)' }}>Bu ay yansıyacak</div>
           <div className="rakam mt-1 text-[22px] font-semibold">{tl(buAy.reduce((t, b) => t + b.tutar, 0))}</div>
-          <div className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>{buAy.length} taksit</div>
-        </div>
-        <div className="kart p-4">
+          <div className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>{buAy.length} taksit · {suzgec === 'buay' ? 'süzgeci kaldır' : 'süzmek için tıkla'}</div>
+        </Link>
+        <Link href="/taksitler?bekleyen=tumu" className="kart block p-4 hover:bg-[var(--plane)]" style={kutuStil(suzgec === null)} aria-pressed={suzgec === null}>
           <div className="text-[12px]" style={{ color: 'var(--ink-muted)' }}>Toplam bekleyen</div>
           <div className="rakam mt-1 text-[22px] font-semibold">{tl(bekleyen.reduce((t, b) => t + b.tutar, 0))}</div>
-          <div className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>{bekleyen.length} taksit</div>
-        </div>
+          <div className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>{bekleyen.length} taksit · hepsi</div>
+        </Link>
         {gecikmis.length > 0 && (
-          <div className="kart p-4 lg:col-span-2" style={{ borderColor: 'var(--ciddi)' }}>
+          <Link href={suzgec === 'gecikmis' ? '/taksitler' : '/taksitler?bekleyen=gecikmis'} className="kart block p-4 hover:bg-[var(--plane)] lg:col-span-2" style={kutuStil(suzgec === 'gecikmis', 'var(--ciddi)')} aria-pressed={suzgec === 'gecikmis'}>
             <div className="text-[12px]" style={{ color: 'var(--ciddi)' }}>Kesimi geçmiş, deftere yazılmamış</div>
             <div className="rakam mt-1 text-[22px] font-semibold">{tl(gecikmis.reduce((t, b) => t + b.tutar, 0))}</div>
             <div className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
               {gecikmis.length} taksit — ekstre gelince görev doğrular ya da yazar; plan bilgisi arşivle çelişebilir.
             </div>
-          </div>
+          </Link>
         )}
       </div>
 
-      {bekleyen.length === 0 ? (
+      {listelenen.length === 0 ? (
         <p className="kart mt-3 p-6 text-center text-[13px]" style={{ color: 'var(--ink-muted)' }}>
-          Bekleyen taksit yok.
+          {suzgec ? 'Bu süzgeçte taksit yok.' : 'Bekleyen taksit yok.'}
         </p>
       ) : (
         <div className="kart mt-3 overflow-x-auto">
@@ -198,7 +207,7 @@ export default async function TaksitlerSayfasi() {
               </tr>
             </thead>
             <tbody>
-              {bekleyen.map((b) => (
+              {listelenen.map((b) => (
                 <tr key={`${b.plan.id}-${b.no}`} style={{ borderTop: '1px solid var(--hair)' }}>
                   <td className="rakam px-3 py-2 whitespace-nowrap" style={{ color: b.gecikmis ? 'var(--ciddi)' : undefined }}>
                     {b.tarih ? tarihKisa(b.tarih) : b.ay}
