@@ -2,16 +2,18 @@
 
 import Link from 'next/link'
 import type { VarlikDeger, VarlikGetiri } from '@/lib/tipler-varlik'
-import { SINIF_ETIKETI } from '@/lib/tipler-varlik'
+import { SINIF_ETIKETI, SINIF_KAYNAGI } from '@/lib/tipler-varlik'
 import { tarihKisa, tl, usd, yuzde } from '@/lib/bicim'
-import { SERIT_DONEMLERI, yuzdeMetni, yuzdeRengi, type SeritDonemi } from '@/lib/serit'
+import { SERIT_DONEMLERI, seriDegisimi, yuzdeMetni, yuzdeRengi, type SeritDonemi } from '@/lib/serit'
 
 /**
  * Panonun ustunde, kur seridinin altinda: elimdeki her kalemin ANLIK degeri.
  * Kaynak v_varlik_deger (adet x son olculen fiyat) — ayri bir olcum degil,
  * son olcum neyse o. Fiyati okunamayan kalem "fiyat yok" der; toplam o kalemi
  * icermez ve bu soylenir. Degisim yuzdesi v_varlik_getiri'den (fiyat bazli),
- * secili doneme gore; o kadar gecmis fiyat yoksa "—".
+ * secili doneme gore; o kadar gecmis fiyat yoksa "—". Gram altin icin fiyat
+ * tablosu yeni; onun degisimi ons x kur gunluk serisinden (/api/kur/gecmis)
+ * hesaplanir — iki ucu da ayni seriden, kaynak karisimi yok.
  * Dolar gorunumu gunun kuruyla (kur_gunluk) cevrilir; kur yoksa ₺'de kalir.
  */
 
@@ -29,7 +31,7 @@ const DONEM_SUTUNU: Record<SeritDonemi, keyof VarlikGetiri> = {
 }
 
 export default function VarlikSeridi({
-  degerler, getiriler, para = 'TRY', donem = 'gun', usdtry = null, kurTarihi = null,
+  degerler, getiriler, para = 'TRY', donem = 'gun', usdtry = null, kurTarihi = null, gramSerisi = null,
 }: {
   degerler: VarlikDeger[]
   getiriler: VarlikGetiri[]
@@ -37,6 +39,8 @@ export default function VarlikSeridi({
   donem?: SeritDonemi
   usdtry?: number | null
   kurTarihi?: string | null
+  /** Gram altinin gunluk serisi (ons x USD/TRY / 31,1035); gram kaleminin degisimi bundan. */
+  gramSerisi?: { tarih: string; deger: number }[] | null
 }) {
   const kalemler = degerler
     .filter((d) => Number(d.miktar) !== 0)
@@ -76,8 +80,11 @@ export default function VarlikSeridi({
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
         {kalemler.map((k) => {
           const g = getiri.get(k.varlik_id)
+          const gram = SINIF_KAYNAGI[k.sinif] === 'gram_altin'
           const ham = k.sinif === 'nakit' ? null : (g?.[sutun] as string | null | undefined) ?? null
-          const n = ham === null ? null : Number(ham)
+          // Gram altin: fiyat tablosu kisa; ons x kur serisi tercih edilir, yoksa tablo.
+          const gramDegisim = gram && gramSerisi ? seriDegisimi(gramSerisi, donem) : null
+          const n = gramDegisim !== null ? gramDegisim : ham === null ? null : Number(ham)
           return (
             <div key={k.varlik_id} className="kart px-3 py-2">
               <div className="flex items-baseline justify-between gap-2 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
@@ -86,7 +93,7 @@ export default function VarlikSeridi({
                   {SINIF_ETIKETI[k.sinif] !== k.kod && ` · ${SINIF_ETIKETI[k.sinif]}`}
                 </span>
                 {k.sinif !== 'nakit' && (
-                  <span className="rakam shrink-0" title={n === null ? `${donemAdi} için yeterli fiyat geçmişi yok` : `${donemAdi} fiyat değişimi`} style={{ color: n === null ? 'var(--ink-muted)' : yuzdeRengi(n) }}>
+                  <span className="rakam shrink-0" title={n === null ? `${donemAdi} için yeterli fiyat geçmişi yok` : gramDegisim !== null ? `${donemAdi} değişimi (ons × kur serisi)` : `${donemAdi} fiyat değişimi`} style={{ color: n === null ? 'var(--ink-muted)' : yuzdeRengi(n) }}>
                     {n === null ? '—' : yuzdeMetni(n)}
                   </span>
                 )}

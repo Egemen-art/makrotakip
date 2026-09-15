@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { VarlikDeger, VarlikGetiri } from '@/lib/tipler-varlik'
+import type { KurGecmisi } from '@/app/api/kur/gecmis/route'
 import { SERIT_DONEMLERI, type SeritDonemi } from '@/lib/serit'
 import { SecimGrubu } from './grafik/ortak'
 import KurSeridi from './KurSeridi'
@@ -22,6 +23,17 @@ export default function PanoSeritleri({
 }) {
   const [para, setPara] = useState<'TRY' | 'USD'>('TRY')
   const [donem, setDonem] = useState<SeritDonemi>('gun')
+  // Gunluk kapanis serileri (ons, gram, USD/TRY, EUR/USD): kur seridinin yuzdeleri
+  // ve gram altin kaleminin degisimi buradan. Sayfa acildiktan sonra cekilir.
+  const [gecmis, setGecmis] = useState<KurGecmisi | null>(null)
+  useEffect(() => {
+    let iptal = false
+    fetch('/api/kur/gecmis')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((g: KurGecmisi) => { if (!iptal) setGecmis(g) })
+      .catch(() => { /* yuzdeler "—" kalir */ })
+    return () => { iptal = true }
+  }, [])
 
   return (
     <>
@@ -39,8 +51,8 @@ export default function PanoSeritleri({
           etiket="Para birimi"
         />
       </div>
-      <KurSeridi donem={donem} />
-      <VarlikSeridi degerler={degerler} getiriler={getiriler} para={para} donem={donem} usdtry={usdtry} kurTarihi={kurTarihi} />
+      <KurSeridi donem={donem} gecmis={gecmis} />
+      <VarlikSeridi degerler={degerler} getiriler={getiriler} para={para} donem={donem} usdtry={usdtry} kurTarihi={kurTarihi} gramSerisi={gecmis?.gram ?? null} />
     </>
   )
 }

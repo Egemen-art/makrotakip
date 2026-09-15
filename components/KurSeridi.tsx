@@ -9,18 +9,17 @@ import { SERIT_DONEMLERI, seriDegisimi, yuzdeMetni, yuzdeRengi, type SeritDonemi
 /**
  * Panonun ustundeki canli piyasa seridi: ons altin, gram altin, USD/TRY, EUR/USD.
  * Anlik deger /api/kur'dan (karar 42: tum ajanlar icin tek kur ucu); "dususte mi
- * yukseliste mi" yuzdesi /api/kur/gecmis'teki gunluk kapanis serisinden, secili
- * doneme gore (gun/hafta/ay/6 ay). Ikisi de sayfa acildiktan SONRA cekilir —
+ * yukseliste mi" yuzdesi /api/kur/gecmis'teki gunluk kapanis serisinden (PanoSeritleri
+ * ceker, prop olarak gelir), secili doneme gore. Sayfa acildiktan SONRA cekilir —
  * kaynak yavaslarsa pano beklemesin. Gelmeyen alan "—" kalir; uydurma rakam yok.
  */
 
 const ORAN = new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 4, maximumFractionDigits: 4 })
 const oran = (n: number | null | undefined) => (n === null || n === undefined ? '—' : ORAN.format(n))
 
-export default function KurSeridi({ donem = 'gun' }: { donem?: SeritDonemi }) {
+export default function KurSeridi({ donem = 'gun', gecmis = null }: { donem?: SeritDonemi; gecmis?: KurGecmisi | null }) {
   const [kur, setKur] = useState<Kurlar | null>(null)
   const [durum, setDurum] = useState<'yukleniyor' | 'hazir' | 'hata'>('yukleniyor')
-  const [gecmis, setGecmis] = useState<KurGecmisi | null>(null)
 
   useEffect(() => {
     let iptal = false
@@ -28,10 +27,6 @@ export default function KurSeridi({ donem = 'gun' }: { donem?: SeritDonemi }) {
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((k: Kurlar) => { if (!iptal) { setKur(k); setDurum('hazir') } })
       .catch(() => { if (!iptal) setDurum('hata') })
-    fetch('/api/kur/gecmis')
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((g: KurGecmisi) => { if (!iptal) setGecmis(g) })
-      .catch(() => { /* yuzdeler "—" kalir */ })
     return () => { iptal = true }
   }, [])
 
