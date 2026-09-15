@@ -5,6 +5,7 @@ import Bolum from '@/components/Bolum'
 import AySecici from '@/components/AySecici'
 import NakitSeridi from '@/components/NakitSeridi'
 import KurSeridi from '@/components/KurSeridi'
+import VarlikSeridi from '@/components/VarlikSeridi'
 import TrendGrafigi from '@/components/grafik/TrendGrafigi'
 import KategoriGrafigi from '@/components/grafik/KategoriGrafigi'
 import { bugun, donemEtiket, tarihKisa, tl, tlKurus } from '@/lib/bicim'
@@ -91,6 +92,8 @@ export default async function Pano({
       {nakit && <NakitSeridi nakit={nakit} />}
 
       <KurSeridi />
+
+      <VarlikSeridi degerler={d.varlikDegerleri} getiriler={d.varlikGetirileri} />
 
       {d.hatalar.length > 0 && (
         <div

@@ -2,7 +2,7 @@ import { supabaseSunucu } from '@/lib/supabase/server'
 import type {
   AylikKategori, AylikOzet, Islem, Kart, KategoriBant, KategoriSerisi, Nakit, PortfoyGetiri, TaksitPlani, Taksonomi, Kural,
 } from '@/lib/tipler'
-import type { PortfoyBugun } from '@/lib/tipler-varlik'
+import type { PortfoyBugun, VarlikDeger, VarlikGetiri } from '@/lib/tipler-varlik'
 
 /**
  * Proje Frankfurt'ta (eu-central-1) ve Vercel fonksiyonlari da `fra1`'de.
@@ -19,6 +19,7 @@ export async function panoVerisi(seciliAy: string) {
 
   const [
     ozet, hafta, ay, yil, portfoy, kartlar, taksitler, sonIslemler, soruSayisi, bant, altKategoriler, nakit, portfoyBugun,
+    varlikDegerleri, varlikGetirileri,
   ] = await Promise.all([
     sb.from('v_aylik_ozet').select('*').order('ay'),
     sb.rpc('kategori_serisi', { p_bucket: 'hafta' }),
@@ -35,6 +36,9 @@ export async function panoVerisi(seciliAy: string) {
     sb.from('v_nakit').select('*').limit(1),
     // Adet bazli guncel portfoy; anlik goruntu tablosunun yerini almaz.
     sb.from('v_portfoy_bugun').select('*').limit(1),
+    // Kalem bazinda anlik deger ve gunluk yuzde (pano ustundeki varlik seridi).
+    sb.from('v_varlik_deger').select('*'),
+    sb.from('v_varlik_getiri').select('varlik_id, fiyat_tarihi, son_fiyat, para, gun_yuzde, hafta_yuzde, ay_yuzde, uc_ay_yuzde, yil_yuzde, ilk_fiyat_tarihi'),
   ])
 
   return {
@@ -53,6 +57,8 @@ export async function panoVerisi(seciliAy: string) {
     altKategoriler: (altKategoriler.data ?? []) as AylikKategori[],
     nakit: ((nakit.data ?? [])[0] ?? null) as Nakit | null,
     portfoyBugun: ((portfoyBugun.data ?? [])[0] ?? null) as PortfoyBugun | null,
+    varlikDegerleri: (varlikDegerleri.data ?? []) as VarlikDeger[],
+    varlikGetirileri: (varlikGetirileri.data ?? []) as VarlikGetiri[],
     hatalar: [ozet, hafta, ay, yil, portfoy, kartlar, taksitler, sonIslemler, bant, altKategoriler, nakit]
       .map((s) => s.error?.message)
       .filter(Boolean) as string[],
