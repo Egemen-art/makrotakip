@@ -22,6 +22,7 @@ const FIYAT: Record<string, Intl.NumberFormat> = {
 }
 const fiyatMetni = (f: string | null, para: string | null) =>
   f === null ? 'fiyat yok' : (FIYAT[para ?? 'TRY'] ?? FIYAT.TRY).format(Number(f))
+const adetMetni = (m: string) => new Intl.NumberFormat('tr-TR', { maximumFractionDigits: 4 }).format(Number(m))
 
 const DONEM_SUTUNU: Record<SeritDonemi, keyof VarlikGetiri> = {
   gun: 'gun_yuzde', hafta: 'hafta_yuzde', ay: 'ay_yuzde', '3ay': 'uc_ay_yuzde', '6ay': 'alti_ay_yuzde',
@@ -44,6 +45,13 @@ export default function VarlikSeridi({
   const dolar = para === 'USD' && usdtry !== null && usdtry > 0
   const cevir = (n: number) => (dolar ? n / usdtry! : n)
   const bicim = dolar ? usd : tl
+  // Birim fiyatin secili para birimindeki karsiligi (fiyat zaten o birimdeyse yok).
+  const cevrilmis = (f: number, fiyatPara: string | null): string | null => {
+    if (usdtry === null || usdtry <= 0) return null
+    if (dolar && fiyatPara === 'TRY') return FIYAT.USD.format(f / usdtry)
+    if (!dolar && fiyatPara === 'USD') return FIYAT.TRY.format(f * usdtry)
+    return null
+  }
   const getiri = new Map(getiriler.map((g) => [g.varlik_id, g]))
   const sutun = DONEM_SUTUNU[donem]
   const donemAdi = SERIT_DONEMLERI.find((d) => d.kod === donem)?.ad ?? ''
@@ -86,10 +94,20 @@ export default function VarlikSeridi({
               <div className="rakam mt-0.5 text-[15px] font-semibold leading-tight" style={{ color: k.deger_tl === null ? 'var(--ciddi)' : undefined }}>
                 {k.deger_tl === null ? 'fiyat yok' : bicim(cevir(Number(k.deger_tl)))}
               </div>
+              {/* Tekil (birim) fiyat: kendi para biriminde, yaninda secili birime cevrilmis hali. */}
+              {k.sinif !== 'nakit' && (
+                <div className="rakam mt-0.5 text-[12px]" style={{ color: 'var(--ink-2)' }}>
+                  {fiyatMetni(k.birim_fiyat, k.fiyat_para)}
+                  {k.birim_fiyat !== null && cevrilmis(Number(k.birim_fiyat), k.fiyat_para) && (
+                    <span style={{ color: 'var(--ink-muted)' }}> ≈ {cevrilmis(Number(k.birim_fiyat), k.fiyat_para)}</span>
+                  )}
+                  {k.fiyat_olculdu === false && <span style={{ color: 'var(--ink-muted)' }}> · elle</span>}
+                </div>
+              )}
               <div className="rakam mt-0.5 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
                 {k.sinif === 'nakit'
                   ? 'YK + elde'
-                  : `${fiyatMetni(k.birim_fiyat, k.fiyat_para)}${k.fiyat_olculdu === false ? ' · elle' : ''} · ${toplamTl > 0 && k.deger_tl !== null ? yuzde(Number(k.deger_tl) / toplamTl) : '—'}`}
+                  : `${adetMetni(k.miktar)} adet · pay ${toplamTl > 0 && k.deger_tl !== null ? yuzde(Number(k.deger_tl) / toplamTl) : '—'}`}
               </div>
             </div>
           )
