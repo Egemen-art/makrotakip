@@ -180,21 +180,30 @@ export async function kurTarihli(para: 'USD' | 'EUR', tarih: string): Promise<nu
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Istemci = { from: (t: string) => any }
+/** Nakit toplamini veren okuyucu — ekranda oturumun v_nakit'i, otomatik
+ *  yolda DB fonksiyonunun dondurdugu v_nakit satiri. */
+export type NakitOkuyucu = () => Promise<{ toplam: unknown } | null>
 
-/** Nakit: karar 49'un formulu zaten finans.v_nakit'te; oradan okunur.
- *  Istemci disaridan gelir: ekranda oturum, cron'da servis anahtari. */
-async function nakit(sb?: Istemci): Promise<Fiyat> {
-  if (!sb) {
-    const { supabaseSunucu } = await import('@/lib/supabase/server')
-    sb = await supabaseSunucu()
+async function oturumdanNakit(): Promise<{ toplam: unknown } | null> {
+  const { supabaseSunucu } = await import('@/lib/supabase/server')
+  const sb = await supabaseSunucu()
+  const { data, error } = await sb.from('v_nakit').select('toplam').limit(1).single()
+  if (error) throw new Error(error.message)
+  return data
+}
+
+/** Nakit: karar 49'un formulu zaten finans.v_nakit'te; oradan okunur. */
+async function nakit(oku?: NakitOkuyucu): Promise<Fiyat> {
+  let satir: { toplam: unknown } | null
+  try {
+    satir = await (oku ?? oturumdanNakit)()
+  } catch (e) {
+    return { fiyat: null, para: null, tarih: null, kaynak: 'v_nakit', hata: e instanceof Error ? e.message : String(e) }
   }
-  const { data, error } = await sb!.from('v_nakit').select('toplam, yk_tarih').limit(1).single()
-  if (error || !data) {
-    return { fiyat: null, para: null, tarih: null, kaynak: 'v_nakit', hata: error?.message ?? 'nakit okunamadı' }
+  if (!satir) {
+    return { fiyat: null, para: null, tarih: null, kaynak: 'v_nakit', hata: 'nakit okunamadı' }
   }
-  const toplam = Number(data.toplam)
+  const toplam = Number(satir.toplam)
   return {
     fiyat: Number.isFinite(toplam) ? toplam : null,
     para: 'TRY',
@@ -205,13 +214,13 @@ async function nakit(sb?: Istemci): Promise<Fiyat> {
   }
 }
 
-export async function fiyatOku(kaynak: FiyatKaynagi, sb?: Istemci): Promise<Fiyat> {
+export async function fiyatOku(kaynak: FiyatKaynagi, nakitOku?: NakitOkuyucu): Promise<Fiyat> {
   switch (kaynak.tur) {
     case 'bist': return yahoo(`${kaynak.sembol}.IS`, 'TRY')
     case 'abd': return yahoo(kaynak.sembol, 'USD')
     case 'fon': return teraFon(kaynak.kod)
     case 'gram_altin': return gramAltin()
-    case 'nakit': return nakit(sb)
+    case 'nakit': return nakit(nakitOku)
   }
 }
 

@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { supabaseSunucu } from '@/lib/supabase/server'
 import { sayiOku, bugun } from '@/lib/bicim'
 import { fiyatGecmisi, kurTarihli } from '@/lib/fiyatKaynak'
-import { gunlukOlcum, olcumOzeti, varligaKaynak } from '@/lib/olcum'
+import { dogrudanDepo, gunlukOlcum, olcumOzeti, varligaKaynak } from '@/lib/olcum'
 import {
   HAREKET_TURLERI, KAYNAK_TURLERI, VARLIK_SINIFLARI,
   type KaynakTur, type Varlik, type VarlikSinif,
@@ -217,7 +217,7 @@ export async function gecmisiCek(): Promise<Sonuc> {
 export async function fiyatlariGuncelle(): Promise<Sonuc> {
   const sb = await supabaseSunucu()
   try {
-    const sonuc = await gunlukOlcum(sb)
+    const sonuc = await gunlukOlcum(dogrudanDepo(sb))
     revalidatePath('/portfoy/varliklar')
     revalidatePath('/portfoy')
     revalidatePath('/')
