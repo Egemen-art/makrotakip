@@ -61,3 +61,25 @@ export function bekleyenTaksitler(
   }
   return sonuc.sort((a, b) => (a.tarih ?? `${a.ay}-99`).localeCompare(b.tarih ?? `${b.ay}-99`) || b.tutar - a.tutar)
 }
+
+/** Deftere yazilmis taksit satiri (islemler) + plani. */
+export type YansiyanTaksit = {
+  id: number
+  plan: TaksitPlani | null
+  no: number | null
+  tarih: string
+  tutar: number
+}
+
+/** Secili ayda deftere yazilmis taksitler ("bu ay yansidi"). */
+export function yansiyanTaksitler(
+  planlar: TaksitPlani[],
+  yazilanlar: { id: number; taksit_plan_id: number; taksit_no: number | null; tarih: string; tutar: string }[],
+  ay: string,
+): YansiyanTaksit[] {
+  const planHaritasi = new Map(planlar.map((p) => [p.id, p]))
+  return yazilanlar
+    .filter((y) => y.tarih.slice(0, 7) === ay)
+    .map((y) => ({ id: y.id, plan: planHaritasi.get(y.taksit_plan_id) ?? null, no: y.taksit_no, tarih: y.tarih, tutar: Number(y.tutar) }))
+    .sort((a, b) => b.tarih.localeCompare(a.tarih) || b.tutar - a.tutar)
+}

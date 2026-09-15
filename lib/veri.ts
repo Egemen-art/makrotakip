@@ -42,8 +42,8 @@ export async function panoVerisi(seciliAy: string) {
     // Gunun kuru: varlik seridinin dolar gorunumu bununla cevrilir.
     sb.from('kur_gunluk').select('tarih, usdtry').order('tarih', { ascending: false }).limit(1).maybeSingle(),
     // Gidere henuz yansimayan taksitler: bitmemis tum planlar + deftere yazilmis taksit satirlari.
-    sb.from('taksit_plani').select('*').neq('durum', 'Bitti'),
-    sb.from('islemler').select('taksit_plan_id, taksit_no, tarih').not('taksit_plan_id', 'is', null),
+    sb.from('taksit_plani').select('*'),
+    sb.from('islemler').select('id, taksit_plan_id, taksit_no, tarih, tutar').not('taksit_plan_id', 'is', null),
   ])
 
   return {
@@ -66,7 +66,7 @@ export async function panoVerisi(seciliAy: string) {
     varlikGetirileri: (varlikGetirileri.data ?? []) as VarlikGetiri[],
     sonKur: sonKur.data ? { tarih: sonKur.data.tarih as string, usdtry: Number(sonKur.data.usdtry) } : null,
     taksitPlanlari: (taksitPlanlari.data ?? []) as TaksitPlani[],
-    taksitYazilanlar: (taksitYazilanlar.data ?? []) as { taksit_plan_id: number; taksit_no: number | null; tarih: string }[],
+    taksitYazilanlar: (taksitYazilanlar.data ?? []) as { id: number; taksit_plan_id: number; taksit_no: number | null; tarih: string; tutar: string }[],
     hatalar: [ozet, hafta, ay, yil, portfoy, kartlar, taksitler, sonIslemler, bant, altKategoriler, nakit]
       .map((s) => s.error?.message)
       .filter(Boolean) as string[],

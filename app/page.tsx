@@ -5,7 +5,8 @@ import Bolum from '@/components/Bolum'
 import AySecici from '@/components/AySecici'
 import NakitSeridi from '@/components/NakitSeridi'
 import PanoSeritleri from '@/components/PanoSeritleri'
-import { bekleyenTaksitler } from '@/lib/taksit'
+import { bekleyenTaksitler, yansiyanTaksitler } from '@/lib/taksit'
+import TaksitAkisi from '@/components/TaksitAkisi'
 import TrendGrafigi from '@/components/grafik/TrendGrafigi'
 import KategoriGrafigi from '@/components/grafik/KategoriGrafigi'
 import { bugun, donemEtiket, tarihKisa, tl, tlKurus } from '@/lib/bicim'
@@ -58,10 +59,9 @@ export default async function Pano({
 
   const aylikYuk = d.taksitler.reduce((t, p) => t + say(p.aylik_tutar), 0)
   // Gidere henuz yansimayan taksitler (kesim gununde yazilir); bu ay ve toplam.
-  const bekleyenTaksit = bekleyenTaksitler(d.taksitPlanlari, d.kartlar, d.taksitYazilanlar, bugun())
-  const buAyBekleyen = bekleyenTaksit.filter((b) => b.ay === bugun().slice(0, 7))
-  const buAyTutar = buAyBekleyen.reduce((t, b) => t + b.tutar, 0)
-  const bekleyenTutar = bekleyenTaksit.reduce((t, b) => t + b.tutar, 0)
+  const gunBugun = bugun()
+  const bekleyenTaksit = bekleyenTaksitler(d.taksitPlanlari, d.kartlar, d.taksitYazilanlar, gunBugun)
+  const yansiyanTaksit = yansiyanTaksitler(d.taksitPlanlari, d.taksitYazilanlar, gunBugun.slice(0, 7))
   const kendiYuku = d.taksitler
     .filter((p) => p.yuk_sahibi === 'Kendi gideri')
     .reduce((t, p) => t + say(p.aylik_tutar), 0)
@@ -255,17 +255,8 @@ export default async function Pano({
           <div className="mb-2 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
             Bunun {tl(kendiYuku)} kadarı kendi gideri; kalanı şirket ya da başka kişi ödüyor.
           </div>
-          <div className="mb-3 grid grid-cols-2 gap-2">
-            <Link href="/taksitler?bekleyen=buay" className="rounded-lg px-3 py-2 hover:bg-[var(--plane)]" style={{ border: '1px solid var(--hair)' }}>
-              <div className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>Bu ay yansıyacak</div>
-              <div className="rakam text-[15px] font-semibold">{tl(buAyTutar)}</div>
-              <div className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>{buAyBekleyen.length} taksit · gidere henüz girmedi</div>
-            </Link>
-            <Link href="/taksitler?bekleyen=tumu" className="rounded-lg px-3 py-2 hover:bg-[var(--plane)]" style={{ border: '1px solid var(--hair)' }}>
-              <div className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>Toplam bekleyen</div>
-              <div className="rakam text-[15px] font-semibold">{tl(bekleyenTutar)}</div>
-              <div className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>{bekleyenTaksit.length} taksit</div>
-            </Link>
+          <div className="mb-3">
+            <TaksitAkisi bekleyen={bekleyenTaksit} yansiyan={yansiyanTaksit} bugun={gunBugun} kompakt />
           </div>
           <ul>
             {d.taksitler.slice(0, 6).map((p) => (
