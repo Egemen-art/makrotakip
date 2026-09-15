@@ -12,7 +12,7 @@ export const maxDuration = 60
  *   GET/POST /api/olcum
  *   Authorization: Bearer <olcum_token>
  *
- * Tetikleyen: Supabase pg_cron (portfoy_gunluk_olcum, 04:45 UTC) — token
+ * Tetikleyen: Supabase pg_cron (portfoy_gunluk_olcum; 09:30, 15:30, 18:30 TR) — token
  * Vault'ta durur, dogrulayan DB'dir (finans.olcum_yetki). Bu uc yalnizca
  * fiyatlari ceker; okuma/yazma anon istemciyle DB fonksiyonlari uzerinden
  * olur. Vercel'de hicbir ortam degiskeni (CRON_SECRET, servis anahtari)

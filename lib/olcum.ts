@@ -15,8 +15,9 @@ import type { Varlik } from '@/lib/tipler-varlik'
  *                   DB fonksiyonlaridir (finans.olcum_baslangic / olcum_yaz),
  *                   Vercel'de hicbir sir tanimli olmasi gerekmez.
  *
- * Sira: fiyatlar -> gunun kuru -> bugunku degerler portfoy_gunluk'e
- * (finans.portfoy_gunluk_olc). Okunamayan fiyat ATLANIR ve adiyla raporlanir;
+ * Sira: fiyatlar -> gunun kuru -> bugunku degerler portfoy_olcum'a
+ * (finans.portfoy_gunluk_olc; her calisma AYRI satir, gunun son olcumu
+ * portfoy_gunluk gorunumunden okunur). Okunamayan fiyat ATLANIR ve adiyla raporlanir;
  * eski fiyat bugune kopyalanmaz, uydurma rakam yazilmaz (karar 50).
  */
 
@@ -35,7 +36,7 @@ export type FiyatSatiri = {
 export type OlcumDeposu = {
   varliklar(): Promise<Varlik[]>
   nakit: NakitOkuyucu
-  /** Fiyatlar + kur + portfoy_gunluk; yazilan kalem sayisini dondurur. */
+  /** Fiyatlar + kur + portfoy_olcum; yazilan kalem sayisini dondurur. */
   yaz(gun: string, fiyatlar: FiyatSatiri[], kur: Kurlar): Promise<number>
 }
 
@@ -144,8 +145,8 @@ export async function gunlukOlcum(depo: OlcumDeposu): Promise<OlcumSonucu> {
   // 2) Gunun kuru.
   const kur = await kurlariGetir()
 
-  // 3) Yazim: fiyatlar -> kur -> portfoy_gunluk (ayni gun tekrar calisirsa yenilenir;
-  //    akis penceresi olcum_zamani'na gore kurulur).
+  // 3) Yazim: fiyatlar -> kur -> portfoy_olcum (her calisma yeni satir; gunun
+  //    son olcumu gecerli, akis penceresi olcum_zamani'na gore kurulur).
   const kalem = await depo.yaz(gun, yazilacak, kur)
   const olcum = kalem > 0 ? `${kalem} kalem` : 'yazılacak kalem yok'
 
