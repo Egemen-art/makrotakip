@@ -29,7 +29,20 @@ async function calistir(istek: Request) {
   const baslik = istek.headers.get('authorization') ?? ''
   const verilen = baslik.startsWith('Bearer ') ? baslik.slice(7) : ''
   const yetkili = esit(verilen, process.env.CRON_SECRET) || esit(verilen, process.env.INGEST_TOKEN)
-  if (!yetkili) return NextResponse.json({ hata: 'Yetkisiz.' }, { status: 401 })
+  if (!yetkili) {
+    // 401 iki gundur sessizce tekrarladi. Neden reddedildigi loglardan gorulsun —
+    // sir degeri degil, yalnizca "var mi / uzunluk tutuyor mu".
+    console.warn('olcum 401', JSON.stringify({
+      baslikVar: baslik.length > 0,
+      bearerVar: verilen.length > 0,
+      verilenUzunluk: verilen.length,
+      cronSecretTanimli: !!process.env.CRON_SECRET,
+      cronSecretUzunluk: process.env.CRON_SECRET?.length ?? 0,
+      ingestTokenTanimli: !!process.env.INGEST_TOKEN,
+      kaynak: istek.headers.get('user-agent') ?? null,
+    }))
+    return NextResponse.json({ hata: 'Yetkisiz.' }, { status: 401 })
+  }
 
   const servisAnahtari = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!servisAnahtari) {
