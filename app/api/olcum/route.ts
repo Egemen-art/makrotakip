@@ -28,7 +28,23 @@ function esit(verilen: string, beklenen: string | undefined) {
 async function calistir(istek: Request) {
   const baslik = istek.headers.get('authorization') ?? ''
   const verilen = baslik.startsWith('Bearer ') ? baslik.slice(7) : ''
-  const yetkili = esit(verilen, process.env.CRON_SECRET) || esit(verilen, process.env.INGEST_TOKEN)
+
+  const servisAnahtari = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!servisAnahtari) {
+    return NextResponse.json({ hata: 'SUPABASE_SERVICE_ROLE_KEY tanımlı değil.' }, { status: 503 })
+  }
+  const sb = createClient(SUPABASE_URL, servisAnahtari, {
+    db: { schema: 'finans' }, auth: { persistSession: false, autoRefreshToken: false },
+  })
+
+  // Uc yol: Vercel Cron (CRON_SECRET), gorev/elle (INGEST_TOKEN), ya da
+  // Supabase pg_cron — o token Vault'ta durur, DB fonksiyonu dogrular; Vercel
+  // ortam degiskenine bagimli degildir (CRON_SECRET iki gun 401 verdi).
+  let yetkili = esit(verilen, process.env.CRON_SECRET) || esit(verilen, process.env.INGEST_TOKEN)
+  if (!yetkili && verilen.length >= 32) {
+    const { data } = await sb.rpc('olcum_token_dogru', { p_token: verilen })
+    yetkili = data === true
+  }
   if (!yetkili) {
     // 401 iki gundur sessizce tekrarladi. Neden reddedildigi loglardan gorulsun —
     // sir degeri degil, yalnizca "var mi / uzunluk tutuyor mu".
@@ -43,14 +59,6 @@ async function calistir(istek: Request) {
     }))
     return NextResponse.json({ hata: 'Yetkisiz.' }, { status: 401 })
   }
-
-  const servisAnahtari = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!servisAnahtari) {
-    return NextResponse.json({ hata: 'SUPABASE_SERVICE_ROLE_KEY tanımlı değil.' }, { status: 503 })
-  }
-  const sb = createClient(SUPABASE_URL, servisAnahtari, {
-    db: { schema: 'finans' }, auth: { persistSession: false, autoRefreshToken: false },
-  })
 
   try {
     const sonuc = await gunlukOlcum(sb)
