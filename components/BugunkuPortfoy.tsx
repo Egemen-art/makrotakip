@@ -22,7 +22,7 @@ export default function BugunkuPortfoy({
   /** Gunluk zincir: son satirin gun/kumulatif getirisi baslikta gosterilir. */
   performans?: PortfoyPerformans[]
   /** Baslangictan beri reel getiri (karar 53); enflasyon verisi yoksa reel null. */
-  reel?: { reel: number | null; gecici: boolean; seri: EnflasyonSerisi; sonAy: string | null } | null
+  reel?: { reel: number | null; enflasyon: number | null; gecici: boolean; seri: EnflasyonSerisi; sonAy: string | null } | null
 }) {
   // Dolar gorunumu ama kur yok: TL'de kal ve soyle — yaklasik kur uydurulmaz.
   const dolar = para === 'USD' && usdtry !== null && usdtry > 0
@@ -85,7 +85,7 @@ export default function BugunkuPortfoy({
                 <>
                   {' · '}reel <span className="rakam font-medium" style={{ color: renk(reel.reel) }}>{yuzdeMetni(reel.reel)}</span>
                   <span className="ml-1 text-[11px]" style={{ color: reel.gecici ? 'var(--ciddi)' : 'var(--ink-muted)' }}>
-                    ({SERI_ETIKETI[reel.seri]}{reel.gecici ? ', geçici' : ''})
+                    ({SERI_ETIKETI[reel.seri]}{reel.enflasyon === null ? '' : ` ${yuzdeMetni(reel.enflasyon)}`}{reel.gecici ? ', geçici' : ''})
                   </span>
                 </>
               )

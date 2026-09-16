@@ -11,7 +11,7 @@ import { GRUP_ETIKETI, SINIF_ETIKETI, SINIF_GRUBU } from '@/lib/tipler-varlik'
 import { tarihKisa, tl, usd, yuzde } from '@/lib/bicim'
 import { donemBasligi, donemGetirisi, donemZinciri, type Donem } from '@/lib/donem'
 import { gunlukZincir, olcumZinciri, type ZincirSatiri } from '@/lib/zincir'
-import { deflatorKur, reelZincir, SERI_ETIKETI, type EnflasyonSatiri, type EnflasyonSerisi } from '@/lib/enflasyon'
+import { deflatorKur, donemEnflasyonu, reelZincir, SERI_ETIKETI, type EnflasyonSatiri, type EnflasyonSerisi } from '@/lib/enflasyon'
 import { EKSEN_STILI, SERI_RENKLERI } from './grafik/ortak'
 import GunIci from './GunIci'
 
@@ -88,7 +88,10 @@ export default function PortfoyPerformansGorunumu({
   // Gecici bayragi: zincirin herhangi bir gunu henuz aciklanmamis aya dusuyorsa.
   const kesit = (satirlar: ZincirSatiri[]) => {
     const z = reelAktif ? reelZincir(satirlar, deflator!) : { satirlar, gecici: false, eksik: false }
-    return { zincir: donemZinciri(z.satirlar, donem, (x) => x.r, (x) => x.deger), gecici: z.gecici, eksik: z.eksik }
+    const zincir = donemZinciri(z.satirlar, donem, (x) => x.r, (x) => x.deger)
+    // Reel gorunumde nominal kesit de tutulur: "nominal · enflasyon · reel" satiri icin.
+    const nominal = reelAktif ? donemZinciri(satirlar, donem, (x) => x.r, (x) => x.deger) : zincir
+    return { zincir, nominal, gecici: z.gecici, eksik: z.eksik }
   }
   const toplamZinciri = (): ZincirSatiri[] =>
     [...toplam].sort((a, b) => a.tarih.localeCompare(b.tarih)).map((t) => ({ tarih: t.tarih, r: gunlukR(t), deger: gunlukDeger(t) }))
@@ -124,7 +127,7 @@ export default function PortfoyPerformansGorunumu({
   }
 
   // Cizgi: ne secildiyse onun donem kesiti — kalem, grup ya da toplam portfoy.
-  const { zincir: seri, gecici: seriGecici } = useMemo(() => {
+  const { zincir: seri, nominal: nominalSeri, gecici: seriGecici } = useMemo(() => {
     if (varlikId === null && grup === null) return kesit(toplamZinciri())
     const uyeler = kalemler.filter((k) =>
       varlikId !== null ? k.varlik_id === varlikId : (SINIF_GRUBU[k.sinif] ?? 'diger') === grup)
@@ -142,6 +145,9 @@ export default function PortfoyPerformansGorunumu({
   }, [gunIci, varlikId, grup])
   const son = seri.at(-1)
   const donemAdi = donemBasligi(donem)
+  // Donemdeki enflasyon: kesitin ilk ve son gunu arasinda endeks degisimi.
+  const donemEnf = reelAktif && seri.length >= 2 ? donemEnflasyonu(deflator!, seri[0].tarih, seri[seri.length - 1].tarih) : null
+  const nominalSon = nominalSeri.at(-1)
   const seciliVarlik = varlikId === null ? null : degerler.find((d) => d.varlik_id === varlikId) ?? null
   const seciliGrup = grup ? gruplar.find((g) => g.ad === grup) ?? null : null
   const seciliGrupAdi = seciliVarlik
@@ -313,6 +319,18 @@ export default function PortfoyPerformansGorunumu({
                 </span>
               )}
             </div>
+
+            {reelAktif && seri.length >= 2 && nominalSon && donemEnf && (
+              <p className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[12px]" style={{ color: 'var(--ink-2)' }}>
+                <span>Nominal <span className="rakam font-medium" style={{ color: nominalSon.yuzde > 0 ? 'var(--artis-iyi)' : nominalSon.yuzde < 0 ? 'var(--kritik)' : 'var(--ink)' }}>{yuzdeMetni(String(nominalSon.yuzde))}</span></span>
+                <span>Enflasyon <span className="rakam font-medium">{yuzdeMetni(String(donemEnf.yuzde))}</span>
+                  <span className="ml-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>({SERI_ETIKETI[enfSeri]}, {tarihKisa(seri[0].tarih)} → {tarihKisa(seri[seri.length - 1].tarih)}{donemEnf.gecici ? ', geçici' : ''})</span>
+                </span>
+                <span>Reel <span className="rakam font-medium" style={{ color: son!.yuzde > 0 ? 'var(--artis-iyi)' : son!.yuzde < 0 ? 'var(--kritik)' : 'var(--ink)' }}>{yuzdeMetni(String(son!.yuzde))}</span>
+                  <span className="ml-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>= (1 + nominal) / (1 + enflasyon) − 1</span>
+                </span>
+              </p>
+            )}
 
             {seri.length < 2 ? (
               <p className="py-6 text-center text-[12px]" style={{ color: 'var(--ink-muted)' }}>

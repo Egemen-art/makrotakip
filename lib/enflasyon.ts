@@ -108,6 +108,13 @@ export function sonEnflasyon(satirlar: EnflasyonSatiri[], seri: EnflasyonSerisi)
   }
 }
 
+/** Iki gun arasindaki enflasyon (%): I(bit) / I(bas) − 1; gecici endekse dayaniyorsa isaretler. */
+export function donemEnflasyonu(d: Deflator, bas: string, bit: string): { yuzde: number; gecici: boolean } | null {
+  const a = d.endeks(bas), b = d.endeks(bit)
+  if (!a || !b) return null
+  return { yuzde: (b.deger / a.deger - 1) * 100, gecici: a.gecici || b.gecici }
+}
+
 /** Zincirin birikimli getirisi (%): Π(1 + r) − 1; tek satirda null. */
 export function kumulatifGetiri(satirlar: ZincirSatiri[]): number | null {
   if (satirlar.length < 2) return null
@@ -120,14 +127,15 @@ export function baslangictanReel(
   enflasyon: EnflasyonSatiri[],
   dolar: boolean,
   abdSeri: Exclude<EnflasyonSerisi, 'tufe'> = 'cpi',
-): { nominal: number | null; reel: number | null; gecici: boolean; seri: EnflasyonSerisi; sonAy: string | null } {
+): { nominal: number | null; reel: number | null; enflasyon: number | null; gecici: boolean; seri: EnflasyonSerisi; sonAy: string | null } {
   const seri: EnflasyonSerisi = dolar ? abdSeri : 'tufe'
   const rows: ZincirSatiri[] = [...toplam]
     .sort((a, b) => a.tarih.localeCompare(b.tarih))
     .map((t) => ({ tarih: t.tarih, r: Number((dolar ? t.gun_yuzde_usd : t.gun_yuzde) ?? 0), deger: Number((dolar ? t.deger_usd : t.deger_tl) ?? 0) }))
   const nominal = kumulatifGetiri(rows)
   const d = deflatorKur(enflasyon, seri)
-  if (!d) return { nominal, reel: null, gecici: false, seri, sonAy: null }
+  if (!d) return { nominal, reel: null, enflasyon: null, gecici: false, seri, sonAy: null }
   const r = reelZincir(rows, d)
-  return { nominal, reel: r.eksik ? null : kumulatifGetiri(r.satirlar), gecici: r.gecici, seri, sonAy: d.sonAy }
+  const enf = rows.length >= 2 ? donemEnflasyonu(d, rows[0].tarih, rows[rows.length - 1].tarih) : null
+  return { nominal, reel: r.eksik ? null : kumulatifGetiri(r.satirlar), enflasyon: enf?.yuzde ?? null, gecici: r.gecici, seri, sonAy: d.sonAy }
 }

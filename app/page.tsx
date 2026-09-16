@@ -228,7 +228,7 @@ export default async function Pano({
                 ? [
                     `${d.portfoyBugun!.kalem} kalem${d.portfoyBugun!.en_yeni_fiyat ? ` · ${tarihKisa(d.portfoyBugun!.en_yeni_fiyat)}` : ''}`,
                     reelOzet.nominal === null ? null : `başlangıçtan ${reelOzet.nominal >= 0 ? '+' : ''}${reelOzet.nominal.toFixed(2)} %`,
-                    reelOzet.reel === null ? null : `reel ${reelOzet.reel >= 0 ? '+' : ''}${reelOzet.reel.toFixed(2)} %${reelOzet.gecici ? ' (geçici)' : ''}`,
+                    reelOzet.reel === null ? null : `reel ${reelOzet.reel >= 0 ? '+' : ''}${reelOzet.reel.toFixed(2)} %${reelOzet.enflasyon === null ? '' : ` (TÜFE ${reelOzet.enflasyon >= 0 ? '+' : ''}${reelOzet.enflasyon.toFixed(2)} %${reelOzet.gecici ? ', geçici' : ''})`}`,
                   ].filter(Boolean).join(' · ')
                 : d.portfoy ? tarihKisa(d.portfoy.tarih) : undefined
             }
