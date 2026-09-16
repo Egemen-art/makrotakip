@@ -25,7 +25,7 @@ const evdsTarih = (d: Date) => `${String(d.getUTCDate()).padStart(2, '0')}-${Str
 const ucYilOnce = () => { const d = new Date(); d.setUTCFullYear(d.getUTCFullYear() - 3); return d }
 
 async function evds(anahtar: string): Promise<{ satirlar: Satir[]; durum: number; bas: string }> {
-  const url = `https://evds3.tcmb.gov.tr/igmevdsms-dis/series=TP.FG.J0&startDate=${evdsTarih(ucYilOnce())}&endDate=${evdsTarih(new Date())}&type=json&frequency=5`
+  const url = `https://evds3.tcmb.gov.tr/igmevdsms-dis/series=TP.TUKFIY2025.GENEL&startDate=${evdsTarih(ucYilOnce())}&endDate=${evdsTarih(new Date())}&type=json&frequency=5`
   const r = await fetch(url, { headers: { key: anahtar, Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 finans-takip' }, signal: AbortSignal.timeout(ZAMAN_ASIMI), cache: 'no-store' })
   const metin = await r.text()
   const bas = `[${r.status} ${r.headers.get('content-type') ?? ''}] ${metin.replace(/\s+/g, ' ').slice(0, 400)}`
@@ -34,7 +34,7 @@ async function evds(anahtar: string): Promise<{ satirlar: Satir[]; durum: number
   try { j = JSON.parse(metin) } catch { return { satirlar: [], durum: r.status, bas } }
   const satirlar: Satir[] = []
   for (const it of j.items ?? []) {
-    const k = Object.keys(it).find((x) => x.startsWith('TP_FG_J0'))
+    const k = Object.keys(it).find((x) => x.startsWith('TP_TUKFIY2025_GENEL'))
     const v = k ? it[k] : null
     const t = it.Tarih
     if (!v || !t) continue
@@ -96,7 +96,7 @@ export async function GET(istek: Request) {
         sonuc[seri] = { hata: `HTTP ${okuma.durum}`, bas }
         continue
       }
-      const kaynak = seri === 'tufe' ? 'EVDS TP.FG.J0' : seri === 'cpi' ? 'FRED CPIAUCSL' : 'FRED PCEPI'
+      const kaynak = seri === 'tufe' ? 'EVDS TP.TUKFIY2025.GENEL' : seri === 'cpi' ? 'FRED CPIAUCSL' : 'FRED PCEPI'
       const { data, error } = await sb.rpc('enflasyon_yaz', { p_token: token, p_seri: seri, p_satirlar: okuma.satirlar, p_kaynak: kaynak })
       sonuc[seri] = error ? { hata: error.message } : { yazilan: data, son: okuma.satirlar.at(-1) }
     }
