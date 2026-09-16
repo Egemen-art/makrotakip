@@ -20,7 +20,7 @@ export async function panoVerisi(seciliAy: string) {
 
   const [
     ozet, hafta, ay, yil, portfoy, kartlar, taksitler, sonIslemler, soruSayisi, bant, altKategoriler, nakit, portfoyBugun,
-    varlikDegerleri, varlikGetirileri, sonKur, taksitPlanlari, taksitYazilanlar, enflasyon, portfoyZinciri,
+    varlikDegerleri, varlikGetirileri, sonKur, taksitPlanlari, taksitYazilanlar, enflasyon, portfoyZinciri, abdFaiz,
   ] = await Promise.all([
     sb.from('v_aylik_ozet').select('*').order('ay'),
     sb.rpc('kategori_serisi', { p_bucket: 'hafta' }),
@@ -49,6 +49,8 @@ export async function panoVerisi(seciliAy: string) {
     // Enflasyon (karar 53): kur seridi kutulari ve baslangictan beri reel.
     sb.from('v_enflasyon').select('*').order('ay'),
     sb.from('v_portfoy_performans').select('*').order('tarih'),
+    // ABD faizleri (FRED): 10Y, 2Y, Fed araligi — kur seridi kutulari ve donem farki.
+    sb.from('abd_faiz').select('seri, tarih, deger').order('tarih'),
   ])
 
   return {
@@ -74,6 +76,7 @@ export async function panoVerisi(seciliAy: string) {
     taksitYazilanlar: (taksitYazilanlar.data ?? []) as { id: number; taksit_plan_id: number; taksit_no: number | null; tarih: string; tutar: string }[],
     enflasyon: (enflasyon.data ?? []) as EnflasyonSatiri[],
     portfoyZinciri: (portfoyZinciri.data ?? []) as PortfoyPerformans[],
+    abdFaiz: (abdFaiz.data ?? []) as { seri: string; tarih: string; deger: string }[],
     hatalar: [ozet, hafta, ay, yil, portfoy, kartlar, taksitler, sonIslemler, bant, altKategoriler, nakit]
       .map((s) => s.error?.message)
       .filter(Boolean) as string[],

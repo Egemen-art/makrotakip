@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import type { Kurlar } from '@/lib/tipler'
 import type { KurGecmisi } from '@/app/api/kur/gecmis/route'
 import { tl, tlKurus, usdKurus } from '@/lib/bicim'
-import { SERIT_DONEMLERI, seriDegisimi, yuzdeMetni, yuzdeRengi, type SeritDonemi } from '@/lib/serit'
+import { SERIT_DONEMLERI, seriDegisimi, seriFarki, yuzdeMetni, yuzdeRengi, type SeritDonemi } from '@/lib/serit'
 
 /**
  * Panonun ustundeki canli piyasa seridi: ons altin, gram altin, USD/TRY, EUR/USD.
@@ -17,20 +17,29 @@ import { SERIT_DONEMLERI, seriDegisimi, yuzdeMetni, yuzdeRengi, type SeritDonemi
 const ORAN = new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 4, maximumFractionDigits: 4 })
 const oran = (n: number | null | undefined) => (n === null || n === undefined ? '—' : ORAN.format(n))
 
+const AY_ADI = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara']
+
 /** Son aciklanan ayin yillik/aylik degisimi, seri basina (finans.v_enflasyon). */
 export type EnflasyonKutulari = Record<'tufe' | 'cpi' | 'pce', { ay: string; yillik: number | null; aylik: number | null } | null>
+/** ABD faiz serileri (FRED, gunluk): kutuda son deger, secili donemde baz puan farki. */
+export type FaizSerileri = Record<'dgs10' | 'dgs2' | 'fedUst' | 'fedAlt', { tarih: string; deger: number }[]>
+const FAIZ = new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const faizMetni = (n: number | null | undefined) => (n === null || n === undefined ? '—' : `${FAIZ.format(n)} %`)
+const bpMetni = (fark: number | null) => (fark === null ? null : `${fark > 0 ? '+' : ''}${Math.round(fark * 100)} bp`)
+const kisaTarih = (iso: string) => `${Number(iso.slice(8, 10))} ${AY_ADI[Number(iso.slice(5, 7)) - 1]}`
 
-const AY_ADI = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara']
 const ayEtiketi = (ym: string) => `${AY_ADI[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`
 const yuzdeDuz = (n: number | null) => (n === null ? '—' : `${new Intl.NumberFormat('tr-TR', { maximumFractionDigits: 2 }).format(n)} %`)
 
 export default function KurSeridi({
-  donem = 'gun', gecmis = null, enflasyon = null,
+  donem = 'gun', gecmis = null, enflasyon = null, faiz = null,
 }: {
   donem?: SeritDonemi
   gecmis?: KurGecmisi | null
   /** Enflasyon kutulari (karar 53); veri yoksa "—" ve anahtar notu. */
   enflasyon?: EnflasyonKutulari | null
+  /** ABD faizleri: 10Y, 2Y, Fed hedef araligi. */
+  faiz?: FaizSerileri | null
 }) {
   const [kur, setKur] = useState<Kurlar | null>(null)
   const [durum, setDurum] = useState<'yukleniyor' | 'hazir' | 'hata'>('yukleniyor')
@@ -100,9 +109,9 @@ export default function KurSeridi({
         ))}
       </div>
 
-      {enflasyon && (
-        <div className="mt-3 grid grid-cols-3 gap-3">
-          {([['tufe', 'TÜFE (TÜİK)'], ['cpi', 'CPI-U (ABD)'], ['pce', 'PCE (ABD)']] as const).map(([k, ad]) => {
+      {(enflasyon || faiz) && (
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {enflasyon && ([['tufe', 'TÜFE (TÜİK)'], ['cpi', 'CPI-U (ABD)'], ['pce', 'PCE (ABD)']] as const).map(([k, ad]) => {
             const e = enflasyon[k]
             return (
               <div key={k} className="kart p-3">
@@ -114,6 +123,38 @@ export default function KurSeridi({
               </div>
             )
           })}
+          {faiz && ([['dgs10', 'ABD 10Y tahvil'], ['dgs2', 'ABD 2Y tahvil']] as const).map(([k, ad]) => {
+            const seri = faiz[k]
+            const son = seri.at(-1) ?? null
+            const fark = seriFarki(seri, donem)
+            return (
+              <div key={k} className="kart p-3">
+                <div className="flex items-baseline justify-between gap-2 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+                  <span>{ad}</span>
+                  {fark !== null && <span className="rakam shrink-0" title={`${donemAdi} değişimi, baz puan`} style={{ color: yuzdeRengi(fark) }}>{bpMetni(fark)}</span>}
+                </div>
+                <div className="rakam mt-0.5 text-[17px] font-semibold leading-tight">{faizMetni(son?.deger)}</div>
+                <div className="rakam mt-0.5 text-[11px]" style={{ color: 'var(--ink-muted)' }}>{son ? `getiri · ${kisaTarih(son.tarih)}` : 'veri yok'}</div>
+              </div>
+            )
+          })}
+          {faiz && (() => {
+            const ust = faiz.fedUst.at(-1) ?? null
+            const alt = faiz.fedAlt.at(-1) ?? null
+            const fark = seriFarki(faiz.fedUst, donem)
+            return (
+              <div className="kart p-3">
+                <div className="flex items-baseline justify-between gap-2 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+                  <span>Fed politika faizi</span>
+                  {fark !== null && fark !== 0 && <span className="rakam shrink-0" title={`${donemAdi} değişimi, baz puan`} style={{ color: yuzdeRengi(fark) }}>{bpMetni(fark)}</span>}
+                </div>
+                <div className="rakam mt-0.5 text-[17px] font-semibold leading-tight">
+                  {ust && alt ? `${FAIZ.format(alt.deger)}–${FAIZ.format(ust.deger)} %` : '—'}
+                </div>
+                <div className="rakam mt-0.5 text-[11px]" style={{ color: 'var(--ink-muted)' }}>{ust ? `hedef aralık · ${kisaTarih(ust.tarih)}` : 'veri yok'}</div>
+              </div>
+            )
+          })()}
         </div>
       )}
 

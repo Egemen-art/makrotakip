@@ -32,3 +32,21 @@ export function seriDegisimi(seri: { tarih: string; deger: number }[], donem: Se
   if (!baz || baz.deger <= 0) return null
   return (son.deger / baz.deger - 1) * 100
 }
+
+/** Seviye farki (yuzde puan): son deger − donem basindaki deger. Faiz gibi seviye serileri icin. */
+export function seriFarki(seri: { tarih: string; deger: number }[], donem: SeritDonemi): number | null {
+  if (seri.length < 2) return null
+  const sirali = [...seri].sort((a, b) => a.tarih.localeCompare(b.tarih))
+  const son = sirali[sirali.length - 1]
+  let baz: { tarih: string; deger: number } | undefined
+  if (donem === 'gun') {
+    baz = sirali[sirali.length - 2]
+  } else {
+    const gun = SERIT_DONEMLERI.find((d) => d.kod === donem)!.gunSayisi
+    const [y, a, g] = son.tarih.split('-').map(Number)
+    const esik = new Date(Date.UTC(y, a - 1, g - gun)).toISOString().slice(0, 10)
+    baz = [...sirali].reverse().find((s) => s.tarih <= esik)
+  }
+  if (!baz) return null
+  return son.deger - baz.deger
+}

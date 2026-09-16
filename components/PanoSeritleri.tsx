@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import type { VarlikDeger, VarlikGetiri } from '@/lib/tipler-varlik'
 import type { KurGecmisi } from '@/app/api/kur/gecmis/route'
-import type { EnflasyonKutulari } from './KurSeridi'
+import type { EnflasyonKutulari, FaizSerileri } from './KurSeridi'
 import { SERIT_DONEMLERI, type SeritDonemi } from '@/lib/serit'
 import { SecimGrubu } from './grafik/ortak'
 import KurSeridi from './KurSeridi'
@@ -15,13 +15,14 @@ import VarlikSeridi from './VarlikSeridi'
  * Secim sayfa icinde kalir; yeniden acildiginda varsayilana doner.
  */
 export default function PanoSeritleri({
-  degerler, getiriler, usdtry, kurTarihi, enflasyon = null,
+  degerler, getiriler, usdtry, kurTarihi, enflasyon = null, faiz = null,
 }: {
   degerler: VarlikDeger[]
   getiriler: VarlikGetiri[]
   usdtry: number | null
   kurTarihi: string | null
   enflasyon?: EnflasyonKutulari | null
+  faiz?: FaizSerileri | null
 }) {
   const [para, setPara] = useState<'TRY' | 'USD'>('TRY')
   const [donem, setDonem] = useState<SeritDonemi>('gun')
@@ -53,7 +54,7 @@ export default function PanoSeritleri({
           etiket="Para birimi"
         />
       </div>
-      <KurSeridi donem={donem} gecmis={gecmis} enflasyon={enflasyon} />
+      <KurSeridi donem={donem} gecmis={gecmis} enflasyon={enflasyon} faiz={faiz} />
       <VarlikSeridi degerler={degerler} getiriler={getiriler} para={para} donem={donem} usdtry={usdtry} kurTarihi={kurTarihi} gramSerisi={gecmis?.gram ?? null} />
     </>
   )

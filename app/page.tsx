@@ -67,6 +67,13 @@ export default async function Pano({
     cpi: sonEnflasyon(d.enflasyon, 'cpi'),
     pce: sonEnflasyon(d.enflasyon, 'pce'),
   }
+  // ABD faiz serileri: kutular istemcide secili doneme gore fark hesaplar.
+  const faizSerileri = {
+    dgs10: d.abdFaiz.filter((f) => f.seri === 'dgs10').map((f) => ({ tarih: f.tarih, deger: Number(f.deger) })),
+    dgs2: d.abdFaiz.filter((f) => f.seri === 'dgs2').map((f) => ({ tarih: f.tarih, deger: Number(f.deger) })),
+    fedUst: d.abdFaiz.filter((f) => f.seri === 'fed_ust').map((f) => ({ tarih: f.tarih, deger: Number(f.deger) })),
+    fedAlt: d.abdFaiz.filter((f) => f.seri === 'fed_alt').map((f) => ({ tarih: f.tarih, deger: Number(f.deger) })),
+  }
   const gunBugun = bugun()
   const bekleyenTaksit = bekleyenTaksitler(d.taksitPlanlari, d.kartlar, d.taksitYazilanlar, gunBugun)
   const yansiyanTaksit = yansiyanTaksitler(d.taksitPlanlari, d.taksitYazilanlar, gunBugun.slice(0, 7))
@@ -110,6 +117,7 @@ export default async function Pano({
         usdtry={d.sonKur?.usdtry ?? null}
         kurTarihi={d.sonKur?.tarih ?? null}
         enflasyon={enflasyonKutulari}
+        faiz={faizSerileri}
       />
 
       {d.hatalar.length > 0 && (
