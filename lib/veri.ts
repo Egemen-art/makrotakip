@@ -4,6 +4,9 @@ import type {
 } from '@/lib/tipler'
 import type { PortfoyBugun, PortfoyPerformans, VarlikDeger, VarlikGetiri } from '@/lib/tipler-varlik'
 import type { EnflasyonSatiri } from '@/lib/enflasyon'
+import type { TakvimSatiri } from '@/components/TakvimListesi'
+import { bugun } from '@/lib/bicim'
+import { gunEkle } from '@/lib/donem'
 
 /**
  * Proje Frankfurt'ta (eu-central-1) ve Vercel fonksiyonlari da `fra1`'de.
@@ -20,7 +23,7 @@ export async function panoVerisi(seciliAy: string) {
 
   const [
     ozet, hafta, ay, yil, portfoy, kartlar, taksitler, sonIslemler, soruSayisi, bant, altKategoriler, nakit, portfoyBugun,
-    varlikDegerleri, varlikGetirileri, sonKur, taksitPlanlari, taksitYazilanlar, enflasyon, portfoyZinciri, abdFaiz, trFaiz,
+    varlikDegerleri, varlikGetirileri, sonKur, taksitPlanlari, taksitYazilanlar, enflasyon, portfoyZinciri, abdFaiz, trFaiz, takvim,
   ] = await Promise.all([
     sb.from('v_aylik_ozet').select('*').order('ay'),
     sb.rpc('kategori_serisi', { p_bucket: 'hafta' }),
@@ -53,6 +56,8 @@ export async function panoVerisi(seciliAy: string) {
     sb.from('abd_faiz').select('seri, tarih, deger').order('tarih'),
     // Turkiye faizleri: TCMB politika (degisiklik tarihleri), TR 10Y / 2Y gosterge tahvil.
     sb.from('tr_faiz').select('seri, tarih, deger').order('tarih'),
+    // Yaklasan onemli tarihler (14 gun).
+    sb.from('takvim').select('*').gte('tarih', bugun()).lte('tarih', gunEkle(bugun(), 14)).order('tarih').order('saat'),
   ])
 
   return {
@@ -80,6 +85,7 @@ export async function panoVerisi(seciliAy: string) {
     portfoyZinciri: (portfoyZinciri.data ?? []) as PortfoyPerformans[],
     abdFaiz: (abdFaiz.data ?? []) as { seri: string; tarih: string; deger: string }[],
     trFaiz: (trFaiz.data ?? []) as { seri: string; tarih: string; deger: string }[],
+    takvim: (takvim.data ?? []) as TakvimSatiri[],
     hatalar: [ozet, hafta, ay, yil, portfoy, kartlar, taksitler, sonIslemler, bant, altKategoriler, nakit]
       .map((s) => s.error?.message)
       .filter(Boolean) as string[],

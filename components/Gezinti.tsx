@@ -8,6 +8,7 @@ const BAGLANTILAR = [
   { yol: '/sorular', ad: 'Sorular' },
   { yol: '/islemler', ad: 'İşlemler' },
   { yol: '/taksitler', ad: 'Taksitler' },
+  { yol: '/takvim', ad: 'Takvim' },
   { yol: '/portfoy', ad: 'Portföy' },
   { yol: '/kurallar', ad: 'Kurallar' },
   { yol: '/taksonomi', ad: 'Taksonomi' },

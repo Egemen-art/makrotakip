@@ -8,6 +8,7 @@ import PanoSeritleri from '@/components/PanoSeritleri'
 import { bekleyenTaksitler, yansiyanTaksitler } from '@/lib/taksit'
 import { baslangictanReel, sonEnflasyon } from '@/lib/enflasyon'
 import TaksitAkisi from '@/components/TaksitAkisi'
+import TakvimListesi from '@/components/TakvimListesi'
 import TrendGrafigi from '@/components/grafik/TrendGrafigi'
 import KategoriGrafigi from '@/components/grafik/KategoriGrafigi'
 import { bugun, donemEtiket, tarihKisa, tl, tlKurus } from '@/lib/bicim'
@@ -228,6 +229,10 @@ export default async function Pano({
           </p>
         </Bolum>
       )}
+
+      <Bolum baslik="Yaklaşan önemli tarihler" aciklama="Önümüzdeki 14 gün · faiz kararları, enflasyon, istihdam, PMI" baglanti={{ yol: '/takvim', ad: 'Takvim' }}>
+        <TakvimListesi satirlar={d.takvim} bugun={gunBugun} kompakt baglanti={false} />
+      </Bolum>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Bolum baslik="Denge" aciklama="Portföy, kart borçları ve net pozisyon" baglanti={{ yol: '/portfoy', ad: 'Portföy' }}>
