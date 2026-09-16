@@ -2,6 +2,7 @@ import Link from 'next/link'
 import type { Para, PortfoyBugun, PortfoyPerformans, PortfoySinif } from '@/lib/tipler-varlik'
 import { GRUP_ETIKETI, SINIF_ETIKETI, SINIF_GRUBU } from '@/lib/tipler-varlik'
 import { tarihKisa, tl, usd, yuzde } from '@/lib/bicim'
+import { SERI_ETIKETI, type EnflasyonSerisi } from '@/lib/enflasyon'
 
 /**
  * Bugunku portfoy: adet x olculen fiyat (finans.varlik + fiyat).
@@ -10,7 +11,7 @@ import { tarihKisa, tl, usd, yuzde } from '@/lib/bicim'
  * eksiktir ve bu soylenir; elle girilen kalem sayisi da gorunur.
  */
 export default function BugunkuPortfoy({
-  ozet, siniflar, para = 'TRY', usdtry = null, kurTarihi = null, performans = [],
+  ozet, siniflar, para = 'TRY', usdtry = null, kurTarihi = null, performans = [], reel = null,
 }: {
   ozet: PortfoyBugun
   siniflar: PortfoySinif[]
@@ -20,6 +21,8 @@ export default function BugunkuPortfoy({
   kurTarihi?: string | null
   /** Gunluk zincir: son satirin gun/kumulatif getirisi baslikta gosterilir. */
   performans?: PortfoyPerformans[]
+  /** Baslangictan beri reel getiri (karar 53); enflasyon verisi yoksa reel null. */
+  reel?: { reel: number | null; gecici: boolean; seri: EnflasyonSerisi; sonAy: string | null } | null
 }) {
   // Dolar gorunumu ama kur yok: TL'de kal ve soyle — yaklasik kur uydurulmaz.
   const dolar = para === 'USD' && usdtry !== null && usdtry > 0
@@ -75,6 +78,18 @@ export default function BugunkuPortfoy({
           <>
             Önceki güne göre <span className="rakam font-medium" style={{ color: renk(gunYuzde) }}>{yuzdeMetni(gunYuzde)}</span>
             {' · '}başlangıçtan beri <span className="rakam font-medium" style={{ color: renk(kumYuzde) }}>{yuzdeMetni(kumYuzde)}</span>
+            {reel && (
+              reel.reel === null ? (
+                <span className="ml-1.5 text-[11px]" style={{ color: 'var(--ink-muted)' }}>(reel: enflasyon verisi yok)</span>
+              ) : (
+                <>
+                  {' · '}reel <span className="rakam font-medium" style={{ color: renk(reel.reel) }}>{yuzdeMetni(reel.reel)}</span>
+                  <span className="ml-1 text-[11px]" style={{ color: reel.gecici ? 'var(--ciddi)' : 'var(--ink-muted)' }}>
+                    ({SERI_ETIKETI[reel.seri]}{reel.gecici ? ', geçici' : ''})
+                  </span>
+                </>
+              )
+            )}
             <span className="ml-1.5 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
               ({olcumSayisi} ölçüm, {zincir[0] ? tarihKisa(zincir[0].tarih) : ''}&apos;den beri · para akışları hariç)
             </span>

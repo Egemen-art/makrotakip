@@ -6,10 +6,12 @@ import type {
 } from '@/lib/tipler-varlik'
 import { bugun } from '@/lib/bicim'
 import { donemCoz } from '@/lib/donem'
+import { baslangictanReel, type EnflasyonSatiri } from '@/lib/enflasyon'
 import BugunkuPortfoy from '@/components/BugunkuPortfoy'
 import DonemSecici from '@/components/DonemSecici'
 import ParaAkislari from '@/components/ParaAkislari'
 import ParaSecici from '@/components/ParaSecici'
+import ReelSecici from '@/components/ReelSecici'
 import PortfoyPerformansGorunumu from '@/components/PortfoyPerformans'
 
 export const dynamic = 'force-dynamic'
@@ -17,17 +19,20 @@ export const dynamic = 'force-dynamic'
 export default async function PortfoySayfasi({
   searchParams,
 }: {
-  searchParams: Promise<{ para?: string; donem?: string; gun?: string; bas?: string; bit?: string }>
+  searchParams: Promise<{ para?: string; donem?: string; gun?: string; bas?: string; bit?: string; reel?: string; abd?: string }>
 }) {
-  const { para: istenen, ...donemParam } = await searchParams
+  const { para: istenen, reel: reelParam, abd: abdParam, ...donemParam } = await searchParams
   const para: Para = istenen === 'USD' ? 'USD' : 'TRY'
+  // Reel gorunum (karar 53): ₺ icin TUFE, $ icin CPI ya da PCE.
+  const reel = reelParam === '1'
+  const abdSeri: 'cpi' | 'pce' = abdParam === 'pce' ? 'pce' : 'cpi'
   const gunBugun = bugun()
   const donem = donemCoz(donemParam, gunBugun)
   const sb = await supabaseSunucu()
   // Anlik goruntu tablosu (finans.portfoy) artik OKUNMUYOR: performans
   // bugunden itibaren gunluk olcumden (portfoy_gunluk) zincirlenir. Veri
   // silinmedi, yalnizca ekran degisti.
-  const [bugunku, siniflar, degerler, toplam, kalemler, kur, gunToplam, gunKalemler, hareketler] = await Promise.all([
+  const [bugunku, siniflar, degerler, toplam, kalemler, kur, gunToplam, gunKalemler, hareketler, enflasyon] = await Promise.all([
     sb.from('v_portfoy_bugun').select('*').limit(1),
     sb.from('v_portfoy_sinif').select('*'),
     sb.from('v_varlik_deger').select('*'),
@@ -44,8 +49,13 @@ export default async function PortfoySayfasi({
       : Promise.resolve({ data: [], error: null }),
     // Para akislari: hareketler + varligin kodu.
     sb.from('varlik_hareket').select('*, varlik(kod, sinif)').order('tarih', { ascending: false }).order('id', { ascending: false }).limit(500),
+    // Aylik fiyat endeksleri (tufe / cpi / pce) — reel getiri icin.
+    sb.from('v_enflasyon').select('*').order('ay'),
   ])
-  const error = [bugunku.error, siniflar.error, degerler.error, toplam.error, kalemler.error, gunToplam.error, gunKalemler.error, hareketler.error].find(Boolean)
+  const error = [bugunku.error, siniflar.error, degerler.error, toplam.error, kalemler.error, gunToplam.error, gunKalemler.error, hareketler.error, enflasyon.error].find(Boolean)
+  const enflasyonSatirlari = (enflasyon.data ?? []) as EnflasyonSatiri[]
+  const usdtryDolar = kur.data?.usdtry ? Number(kur.data.usdtry) : null
+  const reelOzet = baslangictanReel((toplam.data ?? []) as PortfoyPerformans[], enflasyonSatirlari, para === 'USD' && usdtryDolar !== null && usdtryDolar > 0, abdSeri)
   const ozet = ((bugunku.data ?? [])[0] ?? null) as PortfoyBugun | null
   const usdtry = kur.data?.usdtry ? Number(kur.data.usdtry) : null
   const kurTarihi = kur.data?.tarih ?? null
@@ -54,8 +64,9 @@ export default async function PortfoySayfasi({
     <>
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <h1 className="text-[17px] font-semibold">Portföy</h1>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <ParaSecici secili={para} yol="/portfoy" />
+          <ReelSecici reel={reel} abd={abdSeri} para={para} yol="/portfoy" />
           <Link href="/portfoy/varliklar" className="text-[12px] font-medium" style={{ color: 'var(--seri-1)' }}>
             Varlıklar · adet bazlı →
           </Link>
@@ -66,7 +77,7 @@ export default async function PortfoySayfasi({
         akışlarından arındırılmış günlük zincirdir (zaman ağırlıklı). &quot;Fiyatları güncelle&quot; ek ölçüm yazar.
       </p>
       <div className="mt-3">
-        <DonemSecici donem={donem} para={para} bugun={gunBugun} />
+        <DonemSecici donem={donem} bugun={gunBugun} />
       </div>
 
       {error && (
@@ -85,6 +96,7 @@ export default async function PortfoySayfasi({
               usdtry={usdtry}
               kurTarihi={kurTarihi}
               performans={(toplam.data ?? []) as PortfoyPerformans[]}
+              reel={reelOzet}
             />
           </div>
           <div className="mt-4">
@@ -99,6 +111,9 @@ export default async function PortfoySayfasi({
               } : undefined}
               para={para}
               usdtry={usdtry}
+              reel={reel}
+              abdSeri={abdSeri}
+              enflasyon={enflasyonSatirlari}
             />
           </div>
           <div className="mt-4">

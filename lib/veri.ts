@@ -2,7 +2,8 @@ import { supabaseSunucu } from '@/lib/supabase/server'
 import type {
   AylikKategori, AylikOzet, Islem, Kart, KategoriBant, KategoriSerisi, Nakit, PortfoyGetiri, TaksitPlani, Taksonomi, Kural,
 } from '@/lib/tipler'
-import type { PortfoyBugun, VarlikDeger, VarlikGetiri } from '@/lib/tipler-varlik'
+import type { PortfoyBugun, PortfoyPerformans, VarlikDeger, VarlikGetiri } from '@/lib/tipler-varlik'
+import type { EnflasyonSatiri } from '@/lib/enflasyon'
 
 /**
  * Proje Frankfurt'ta (eu-central-1) ve Vercel fonksiyonlari da `fra1`'de.
@@ -19,7 +20,7 @@ export async function panoVerisi(seciliAy: string) {
 
   const [
     ozet, hafta, ay, yil, portfoy, kartlar, taksitler, sonIslemler, soruSayisi, bant, altKategoriler, nakit, portfoyBugun,
-    varlikDegerleri, varlikGetirileri, sonKur, taksitPlanlari, taksitYazilanlar,
+    varlikDegerleri, varlikGetirileri, sonKur, taksitPlanlari, taksitYazilanlar, enflasyon, portfoyZinciri,
   ] = await Promise.all([
     sb.from('v_aylik_ozet').select('*').order('ay'),
     sb.rpc('kategori_serisi', { p_bucket: 'hafta' }),
@@ -45,6 +46,9 @@ export async function panoVerisi(seciliAy: string) {
     // Gidere henuz yansimayan taksitler: bitmemis tum planlar + deftere yazilmis taksit satirlari.
     sb.from('taksit_plani').select('*'),
     sb.from('islemler').select('id, taksit_plan_id, taksit_no, tarih, tutar').not('taksit_plan_id', 'is', null),
+    // Enflasyon (karar 53): kur seridi kutulari ve baslangictan beri reel.
+    sb.from('v_enflasyon').select('*').order('ay'),
+    sb.from('v_portfoy_performans').select('*').order('tarih'),
   ])
 
   return {
@@ -68,6 +72,8 @@ export async function panoVerisi(seciliAy: string) {
     sonKur: sonKur.data ? { tarih: sonKur.data.tarih as string, usdtry: Number(sonKur.data.usdtry) } : null,
     taksitPlanlari: (taksitPlanlari.data ?? []) as TaksitPlani[],
     taksitYazilanlar: (taksitYazilanlar.data ?? []) as { id: number; taksit_plan_id: number; taksit_no: number | null; tarih: string; tutar: string }[],
+    enflasyon: (enflasyon.data ?? []) as EnflasyonSatiri[],
+    portfoyZinciri: (portfoyZinciri.data ?? []) as PortfoyPerformans[],
     hatalar: [ozet, hafta, ay, yil, portfoy, kartlar, taksitler, sonIslemler, bant, altKategoriler, nakit]
       .map((s) => s.error?.message)
       .filter(Boolean) as string[],

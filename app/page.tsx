@@ -6,6 +6,7 @@ import AySecici from '@/components/AySecici'
 import NakitSeridi from '@/components/NakitSeridi'
 import PanoSeritleri from '@/components/PanoSeritleri'
 import { bekleyenTaksitler, yansiyanTaksitler } from '@/lib/taksit'
+import { baslangictanReel, sonEnflasyon } from '@/lib/enflasyon'
 import TaksitAkisi from '@/components/TaksitAkisi'
 import TrendGrafigi from '@/components/grafik/TrendGrafigi'
 import KategoriGrafigi from '@/components/grafik/KategoriGrafigi'
@@ -59,6 +60,13 @@ export default async function Pano({
 
   const aylikYuk = d.taksitler.reduce((t, p) => t + say(p.aylik_tutar), 0)
   // Gidere henuz yansimayan taksitler (kesim gununde yazilir); bu ay ve toplam.
+  // Baslangictan beri nominal ve reel (TUFE) getiri — Denge kutusunda.
+  const reelOzet = baslangictanReel(d.portfoyZinciri, d.enflasyon, false)
+  const enflasyonKutulari = {
+    tufe: sonEnflasyon(d.enflasyon, 'tufe'),
+    cpi: sonEnflasyon(d.enflasyon, 'cpi'),
+    pce: sonEnflasyon(d.enflasyon, 'pce'),
+  }
   const gunBugun = bugun()
   const bekleyenTaksit = bekleyenTaksitler(d.taksitPlanlari, d.kartlar, d.taksitYazilanlar, gunBugun)
   const yansiyanTaksit = yansiyanTaksitler(d.taksitPlanlari, d.taksitYazilanlar, gunBugun.slice(0, 7))
@@ -101,6 +109,7 @@ export default async function Pano({
         getiriler={d.varlikGetirileri}
         usdtry={d.sonKur?.usdtry ?? null}
         kurTarihi={d.sonKur?.tarih ?? null}
+        enflasyon={enflasyonKutulari}
       />
 
       {d.hatalar.length > 0 && (
@@ -216,7 +225,11 @@ export default async function Pano({
             deger={portfoyToplam}
             ikincil={
               canliPortfoy !== null
-                ? `${d.portfoyBugun!.kalem} kalem${d.portfoyBugun!.en_yeni_fiyat ? ` · ${tarihKisa(d.portfoyBugun!.en_yeni_fiyat)}` : ''}`
+                ? [
+                    `${d.portfoyBugun!.kalem} kalem${d.portfoyBugun!.en_yeni_fiyat ? ` · ${tarihKisa(d.portfoyBugun!.en_yeni_fiyat)}` : ''}`,
+                    reelOzet.nominal === null ? null : `başlangıçtan ${reelOzet.nominal >= 0 ? '+' : ''}${reelOzet.nominal.toFixed(2)} %`,
+                    reelOzet.reel === null ? null : `reel ${reelOzet.reel >= 0 ? '+' : ''}${reelOzet.reel.toFixed(2)} %${reelOzet.gecici ? ' (geçici)' : ''}`,
+                  ].filter(Boolean).join(' · ')
                 : d.portfoy ? tarihKisa(d.portfoy.tarih) : undefined
             }
           />

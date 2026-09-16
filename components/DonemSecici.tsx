@@ -1,8 +1,8 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, useTransition } from 'react'
-import { DONEMLER, donemAdresi, gunEkle, type Donem, type DonemKodu } from '@/lib/donem'
+import { DONEMLER, adresYaz, gunEkle, type Donem, type DonemKodu } from '@/lib/donem'
 import { tarihKisa } from '@/lib/bicim'
 import { SecimGrubu } from './grafik/ortak'
 
@@ -11,18 +11,24 @@ import { SecimGrubu } from './grafik/ortak'
  * Secim URL'e yazilir; gun gorunumunde gun, ozelde aralik ayrica secilir.
  */
 export default function DonemSecici({
-  donem, para, bugun, yol = '/portfoy',
+  donem, bugun, yol = '/portfoy',
 }: {
   donem: Donem
-  para: 'TRY' | 'USD'
   bugun: string
   yol?: string
 }) {
   const router = useRouter()
+  const sp = useSearchParams()
   const [, baslat] = useTransition()
   const [bas, setBas] = useState(donem.bas ?? gunEkle(bugun, -30))
   const [bit, setBit] = useState(donem.bit)
-  const git = (d: Partial<Donem> & { kod: DonemKodu }) => baslat(() => router.push(donemAdresi(yol, d, para)))
+  // Diger secimler (para, reel) korunur; yalniz donem anahtarlari yazilir.
+  const git = (d: Partial<Donem> & { kod: DonemKodu }) => baslat(() => router.push(adresYaz(yol, sp, {
+    donem: d.kod === 'tum' ? null : d.kod,
+    gun: d.kod === 'gun' && d.gun ? d.gun : null,
+    bas: d.kod === 'ozel' && d.bas ? d.bas : null,
+    bit: d.kod === 'ozel' && d.bit ? d.bit : null,
+  })))
 
   const girdi = 'rounded-md border px-2 py-1 text-[12px]'
   const girdiStil = { borderColor: 'var(--hair)', background: 'var(--surface)', color: 'var(--ink)' }

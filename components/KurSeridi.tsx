@@ -17,7 +17,21 @@ import { SERIT_DONEMLERI, seriDegisimi, yuzdeMetni, yuzdeRengi, type SeritDonemi
 const ORAN = new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 4, maximumFractionDigits: 4 })
 const oran = (n: number | null | undefined) => (n === null || n === undefined ? '—' : ORAN.format(n))
 
-export default function KurSeridi({ donem = 'gun', gecmis = null }: { donem?: SeritDonemi; gecmis?: KurGecmisi | null }) {
+/** Son aciklanan ayin yillik/aylik degisimi, seri basina (finans.v_enflasyon). */
+export type EnflasyonKutulari = Record<'tufe' | 'cpi' | 'pce', { ay: string; yillik: number | null; aylik: number | null } | null>
+
+const AY_ADI = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara']
+const ayEtiketi = (ym: string) => `${AY_ADI[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`
+const yuzdeDuz = (n: number | null) => (n === null ? '—' : `${new Intl.NumberFormat('tr-TR', { maximumFractionDigits: 2 }).format(n)} %`)
+
+export default function KurSeridi({
+  donem = 'gun', gecmis = null, enflasyon = null,
+}: {
+  donem?: SeritDonemi
+  gecmis?: KurGecmisi | null
+  /** Enflasyon kutulari (karar 53); veri yoksa "—" ve anahtar notu. */
+  enflasyon?: EnflasyonKutulari | null
+}) {
   const [kur, setKur] = useState<Kurlar | null>(null)
   const [durum, setDurum] = useState<'yukleniyor' | 'hazir' | 'hata'>('yukleniyor')
 
@@ -85,6 +99,23 @@ export default function KurSeridi({ donem = 'gun', gecmis = null }: { donem?: Se
           </div>
         ))}
       </div>
+
+      {enflasyon && (
+        <div className="mt-3 grid grid-cols-3 gap-3">
+          {([['tufe', 'TÜFE (TÜİK)'], ['cpi', 'CPI-U (ABD)'], ['pce', 'PCE (ABD)']] as const).map(([k, ad]) => {
+            const e = enflasyon[k]
+            return (
+              <div key={k} className="kart p-3">
+                <div className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>{ad} · yıllık</div>
+                <div className="rakam mt-0.5 text-[17px] font-semibold leading-tight">{e ? yuzdeDuz(e.yillik) : '—'}</div>
+                <div className="rakam mt-0.5 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+                  {e ? `aylık ${yuzdeDuz(e.aylik)} · ${ayEtiketi(e.ay)}` : 'veri yok'}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       <p className="mt-1 text-[11px]" style={{ color: durum === 'hata' ? 'var(--ciddi)' : 'var(--ink-muted)' }}>
         {durum === 'hata'

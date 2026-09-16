@@ -131,3 +131,17 @@ export function donemBasligi(d: Donem) {
     default: return 'başlangıçtan beri'
   }
 }
+
+/**
+ * Mevcut adres parametrelerini koruyarak bir kismini degistirir (null = sil).
+ * Secicilerin (para, donem, reel) birbirinin secimini ezmemesi icin.
+ */
+export function adresYaz(yol: string, mevcut: URLSearchParams | null, degisiklik: Record<string, string | null>) {
+  const q = new URLSearchParams(mevcut ? mevcut.toString() : '')
+  for (const [k, v] of Object.entries(degisiklik)) {
+    if (v === null || v === '') q.delete(k)
+    else q.set(k, v)
+  }
+  const s = q.toString()
+  return s ? `${yol}?${s}` : yol
+}

@@ -10,7 +10,8 @@ import type {
 import { GRUP_ETIKETI, SINIF_ETIKETI, SINIF_GRUBU } from '@/lib/tipler-varlik'
 import { tarihKisa, tl, usd, yuzde } from '@/lib/bicim'
 import { donemBasligi, donemGetirisi, donemZinciri, type Donem } from '@/lib/donem'
-import { gunlukZincir, olcumZinciri } from '@/lib/zincir'
+import { gunlukZincir, olcumZinciri, type ZincirSatiri } from '@/lib/zincir'
+import { deflatorKur, reelZincir, SERI_ETIKETI, type EnflasyonSatiri, type EnflasyonSerisi } from '@/lib/enflasyon'
 import { EKSEN_STILI, SERI_RENKLERI } from './grafik/ortak'
 import GunIci from './GunIci'
 
@@ -34,7 +35,7 @@ const yuzdeMetni = (v: string | null | undefined) => {
 }
 
 export default function PortfoyPerformansGorunumu({
-  degerler, toplam, kalemler, donem, gunIci, para = 'TRY', usdtry = null,
+  degerler, toplam, kalemler, donem, gunIci, para = 'TRY', usdtry = null, reel = false, abdSeri = 'cpi', enflasyon = [],
 }: {
   degerler: VarlikDeger[]
   toplam: PortfoyPerformans[]
@@ -45,6 +46,10 @@ export default function PortfoyPerformansGorunumu({
   para?: Para
   /** Gunun kuru: bugunku dagilim bununla cevrilir. Performans zinciri her gunun kendi kuruyla gelir. */
   usdtry?: number | null
+  /** Reel gorunum (karar 53): zincir fiyat endeksine bolunur. */
+  reel?: boolean
+  abdSeri?: Exclude<EnflasyonSerisi, 'tufe'>
+  enflasyon?: EnflasyonSatiri[]
 }) {
   const [grup, setGrup] = useState<string | null>(null)
   const [varlikId, setVarlikId] = useState<number | null>(null)
@@ -74,18 +79,29 @@ export default function PortfoyPerformansGorunumu({
   const gunlukDeger = (k: { deger_tl: string | null; deger_usd: string | null }) =>
     Number((dolar ? k.deger_usd : k.deger_tl) ?? 0)
 
-  // Kalem bazinda DONEM getirisi — listede yanina yazilir. Gun gorunumunde o
-  // gunun getirisi (onceki gunun son olcumune gore); null = donemde olcum yok.
+  // Reel gorunum: secili para biriminin serisi (₺ -> TUFE, $ -> CPI/PCE).
+  const enfSeri: EnflasyonSerisi = dolar ? abdSeri : 'tufe'
+  const deflator = useMemo(() => (reel ? deflatorKur(enflasyon, enfSeri) : null), [reel, enflasyon, enfSeri])
+  const reelAktif = reel && deflator !== null
+
+  // Tek yol: nominal gunluk zincir kur, reel istendiyse endekse bol, sonra donem kesiti.
+  // Gecici bayragi: zincirin herhangi bir gunu henuz aciklanmamis aya dusuyorsa.
+  const kesit = (satirlar: ZincirSatiri[]) => {
+    const z = reelAktif ? reelZincir(satirlar, deflator!) : { satirlar, gecici: false, eksik: false }
+    return { zincir: donemZinciri(z.satirlar, donem, (x) => x.r, (x) => x.deger), gecici: z.gecici, eksik: z.eksik }
+  }
+  const toplamZinciri = (): ZincirSatiri[] =>
+    [...toplam].sort((a, b) => a.tarih.localeCompare(b.tarih)).map((t) => ({ tarih: t.tarih, r: gunlukR(t), deger: gunlukDeger(t) }))
+
+  // Kalem bazinda DONEM getirisi — listede yanina yazilir; null = donemde olcum yok.
   const donemGetirileri = useMemo(() => {
     const m = new Map<number, number | null>()
     const gruplu = new Map<number, VarlikPerformans[]>()
     for (const k of kalemler) gruplu.set(k.varlik_id, [...(gruplu.get(k.varlik_id) ?? []), k])
-    for (const [id, satirlar] of gruplu) {
-      m.set(id, donemGetirisi(donemZinciri(satirlar, donem, gunlukR, gunlukDeger)))
-    }
+    for (const [id, satirlar] of gruplu) m.set(id, donemGetirisi(kesit(gunlukZincir(satirlar, dolar)).zincir))
     return m
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kalemler, donem, dolar])
+  }, [kalemler, donem, dolar, reelAktif, deflator])
 
   // Grup bazinda DONEM getirisi: kalemlerin degeri ve akisi gun gun toplanip
   // ayni TWR formulu uygulanir (lib/zincir) — grup zinciri veritabaninda yok.
@@ -96,11 +112,10 @@ export default function PortfoyPerformansGorunumu({
       gruplu.set(g, [...(gruplu.get(g) ?? []), k])
     }
     const m = new Map<string, number | null>()
-    for (const [g, satirlar] of gruplu) {
-      m.set(g, donemGetirisi(donemZinciri(gunlukZincir(satirlar, dolar), donem, (z) => z.r, (z) => z.deger)))
-    }
+    for (const [g, satirlar] of gruplu) m.set(g, donemGetirisi(kesit(gunlukZincir(satirlar, dolar)).zincir))
     return m
-  }, [kalemler, donem, dolar])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kalemler, donem, dolar, reelAktif, deflator])
 
   function grupSec(ad: string | undefined) {
     if (!ad) return
@@ -109,15 +124,13 @@ export default function PortfoyPerformansGorunumu({
   }
 
   // Cizgi: ne secildiyse onun donem kesiti — kalem, grup ya da toplam portfoy.
-  const seri = useMemo(() => {
-    if (varlikId === null && grup === null) {
-      return donemZinciri(toplam, donem, gunlukR, gunlukDeger)
-    }
+  const { zincir: seri, gecici: seriGecici } = useMemo(() => {
+    if (varlikId === null && grup === null) return kesit(toplamZinciri())
     const uyeler = kalemler.filter((k) =>
       varlikId !== null ? k.varlik_id === varlikId : (SINIF_GRUBU[k.sinif] ?? 'diger') === grup)
-    return donemZinciri(gunlukZincir(uyeler, dolar), donem, (z) => z.r, (z) => z.deger)
+    return kesit(gunlukZincir(uyeler, dolar))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [varlikId, grup, kalemler, toplam, donem, dolar])
+  }, [varlikId, grup, kalemler, toplam, donem, dolar, reelAktif, deflator])
 
   // Gun gorunumu de secime uyar: o gunun olcumleri secilen kalem/grup icin.
   const gunIciSecili = useMemo(() => {
@@ -148,6 +161,8 @@ export default function PortfoyPerformansGorunumu({
         <span className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
           Getiri para akışlarından arındırılmış; eklediğin para kazanç, çektiğin kayıp sayılmaz.
           {dolar && ' Dolar zinciri her günü kendi kuruyla çevirir.'}
+          {reelAktif && ` Reel: ${SERI_ETIKETI[enfSeri]} ile deflate edilmiş${deflator!.sonAy ? `, son veri ${deflator!.sonAy}` : ''}.`}
+          {reel && !reelAktif && <span style={{ color: 'var(--ciddi)' }}> Reel istendi ama {SERI_ETIKETI[enfSeri]} verisi yok; nominal gösteriliyor.</span>}
         </span>
       </div>
 
@@ -265,14 +280,24 @@ export default function PortfoyPerformansGorunumu({
       {/* ── Performans: gun gorunumunde gun ici olcumler, digerinde donem cizgisi ── */}
       <div className="mt-4 pt-3" style={{ borderTop: '1px solid var(--hair)' }}>
         {donem.kod === 'gun' && gunIciSecili ? (
-          <GunIci gun={donem.gun} toplam={gunIciSecili.toplam} kalemler={gunIciSecili.kalemler} para={para} secimAdi={secimAdi} />
+          <>
+            {reelAktif && <p className="mb-2 text-[11px]" style={{ color: 'var(--ink-muted)' }}>Gün içi ölçümler nominaldir; gün içinde enflasyon ihmal edilir.</p>}
+            <GunIci gun={donem.gun} toplam={gunIciSecili.toplam} kalemler={gunIciSecili.kalemler} para={para} secimAdi={secimAdi} />
+          </>
         ) : (
           <>
             <div className="flex flex-wrap items-baseline justify-between gap-3">
               <p className="text-[12px]" style={{ color: 'var(--ink-2)' }}>
                 <span aria-hidden className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle" style={{ background: cizgiRengi }} />
                 {secimAdi ? `${secimAdi} · getiri` : 'Toplam portföy · getiri'}
-                <span className="ml-1.5 text-[11px]" style={{ color: 'var(--ink-muted)' }}>{donemAdi} · {dolar ? '$ bazında' : '₺ bazında'}</span>
+                <span className="ml-1.5 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+                  {donemAdi} · {dolar ? '$ bazında' : '₺ bazında'}{reelAktif ? ` · reel (${SERI_ETIKETI[enfSeri]})` : ''}
+                </span>
+                {reelAktif && seriGecici && (
+                  <span className="ml-1.5 text-[11px]" style={{ color: 'var(--ciddi)' }} title={`Son açıklanan ay ${deflator!.sonAy}; sonrası son 3 ayın ortalamasıyla (aylık ${deflator!.geciciAylik.toFixed(2)} %) geçici`}>
+                    geçici
+                  </span>
+                )}
                 {seri.length > 0 && (
                   <span className="ml-2 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
                     {tarihKisa(seri[0].tarih)} → {tarihKisa(seri[seri.length - 1].tarih)} · {seri.length} ölçüm
@@ -301,7 +326,7 @@ export default function PortfoyPerformansGorunumu({
                   <LineChart data={seri} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                     <CartesianGrid stroke="var(--grid)" vertical={false} />
                     <XAxis dataKey="tarih" tickFormatter={(t) => tarihKisa(t).replace(/ \d{4}$/, '')} tick={EKSEN_STILI} tickLine={false} axisLine={{ stroke: 'var(--axis)' }} minTickGap={24} />
-                    <YAxis tickFormatter={(v) => `${v} %`} tick={EKSEN_STILI} tickLine={false} axisLine={false} width={52} />
+                    <YAxis tickFormatter={(v) => `${Number(v).toLocaleString("tr-TR", { maximumFractionDigits: 2 })} %`} tick={EKSEN_STILI} tickLine={false} axisLine={false} width={62} />
                     <Tooltip
                       content={({ active, payload, label }) => {
                         if (!active || !payload?.length) return null
