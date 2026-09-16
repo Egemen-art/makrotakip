@@ -69,6 +69,9 @@ export default async function Pano({
   }
   // ABD faiz serileri: kutular istemcide secili doneme gore fark hesaplar.
   const faizSerileri = {
+    tr10y: d.trFaiz.filter((f) => f.seri === 'tr10y').map((f) => ({ tarih: f.tarih, deger: Number(f.deger) })),
+    tr2y: d.trFaiz.filter((f) => f.seri === 'tr2y').map((f) => ({ tarih: f.tarih, deger: Number(f.deger) })),
+    tcmb: d.trFaiz.filter((f) => f.seri === 'politika').map((f) => ({ tarih: f.tarih, deger: Number(f.deger) })),
     dgs10: d.abdFaiz.filter((f) => f.seri === 'dgs10').map((f) => ({ tarih: f.tarih, deger: Number(f.deger) })),
     dgs2: d.abdFaiz.filter((f) => f.seri === 'dgs2').map((f) => ({ tarih: f.tarih, deger: Number(f.deger) })),
     fedUst: d.abdFaiz.filter((f) => f.seri === 'fed_ust').map((f) => ({ tarih: f.tarih, deger: Number(f.deger) })),

@@ -22,7 +22,7 @@ const AY_ADI = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl',
 /** Son aciklanan ayin yillik/aylik degisimi, seri basina (finans.v_enflasyon). */
 export type EnflasyonKutulari = Record<'tufe' | 'cpi' | 'pce', { ay: string; yillik: number | null; aylik: number | null } | null>
 /** ABD faiz serileri (FRED, gunluk): kutuda son deger, secili donemde baz puan farki. */
-export type FaizSerileri = Record<'dgs10' | 'dgs2' | 'fedUst' | 'fedAlt', { tarih: string; deger: number }[]>
+export type FaizSerileri = Record<'tr10y' | 'tr2y' | 'tcmb' | 'dgs10' | 'dgs2' | 'fedUst' | 'fedAlt', { tarih: string; deger: number }[]>
 const FAIZ = new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const faizMetni = (n: number | null | undefined) => (n === null || n === undefined ? '—' : `${FAIZ.format(n)} %`)
 const bpMetni = (fark: number | null) => (fark === null ? null : `${fark > 0 ? '+' : ''}${Math.round(fark * 100)} bp`)
@@ -109,9 +109,9 @@ export default function KurSeridi({
         ))}
       </div>
 
-      {(enflasyon || faiz) && (
-        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          {enflasyon && ([['tufe', 'TÜFE (TÜİK)'], ['cpi', 'CPI-U (ABD)'], ['pce', 'PCE (ABD)']] as const).map(([k, ad]) => {
+      {enflasyon && (
+        <div className="mt-3 grid grid-cols-3 gap-3">
+          {([['tufe', 'TÜFE (TÜİK)'], ['cpi', 'CPI-U (ABD)'], ['pce', 'PCE (ABD)']] as const).map(([k, ad]) => {
             const e = enflasyon[k]
             return (
               <div key={k} className="kart p-3">
@@ -123,7 +123,42 @@ export default function KurSeridi({
               </div>
             )
           })}
-          {faiz && ([['dgs10', 'ABD 10Y tahvil'], ['dgs2', 'ABD 2Y tahvil']] as const).map(([k, ad]) => {
+        </div>
+      )}
+
+      {faiz && (
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {([['tr10y', 'TR 10Y tahvil'], ['tr2y', 'TR 2Y tahvil']] as const).map(([k, ad]) => {
+            const seri = faiz[k]
+            const son = seri.at(-1) ?? null
+            const fark = seriFarki(seri, donem)
+            return (
+              <div key={k} className="kart p-3">
+                <div className="flex items-baseline justify-between gap-2 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+                  <span>{ad}</span>
+                  {fark !== null && <span className="rakam shrink-0" title={`${donemAdi} değişimi, baz puan`} style={{ color: yuzdeRengi(fark) }}>{bpMetni(fark)}</span>}
+                </div>
+                <div className="rakam mt-0.5 text-[17px] font-semibold leading-tight">{faizMetni(son?.deger)}</div>
+                <div className="rakam mt-0.5 text-[11px]" style={{ color: 'var(--ink-muted)' }}>{son ? `gösterge getiri · ${kisaTarih(son.tarih)}` : 'veri yok'}</div>
+              </div>
+            )
+          })}
+          {(() => {
+            const seri = faiz.tcmb
+            const son = seri.at(-1) ?? null
+            const fark = seriFarki(seri, donem)
+            return (
+              <div className="kart p-3">
+                <div className="flex items-baseline justify-between gap-2 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+                  <span>TCMB politika faizi</span>
+                  {fark !== null && fark !== 0 && <span className="rakam shrink-0" title={`${donemAdi} değişimi, baz puan`} style={{ color: yuzdeRengi(fark) }}>{bpMetni(fark)}</span>}
+                </div>
+                <div className="rakam mt-0.5 text-[17px] font-semibold leading-tight">{faizMetni(son?.deger)}</div>
+                <div className="rakam mt-0.5 text-[11px]" style={{ color: 'var(--ink-muted)' }}>{son ? `1 hafta repo · ${kisaTarih(son.tarih)}'den beri` : 'veri yok'}</div>
+              </div>
+            )
+          })()}
+          {([['dgs10', 'ABD 10Y tahvil'], ['dgs2', 'ABD 2Y tahvil']] as const).map(([k, ad]) => {
             const seri = faiz[k]
             const son = seri.at(-1) ?? null
             const fark = seriFarki(seri, donem)
@@ -138,7 +173,7 @@ export default function KurSeridi({
               </div>
             )
           })}
-          {faiz && (() => {
+          {(() => {
             const ust = faiz.fedUst.at(-1) ?? null
             const alt = faiz.fedAlt.at(-1) ?? null
             const fark = seriFarki(faiz.fedUst, donem)
