@@ -25,7 +25,7 @@ const evdsTarih = (d: Date) => `${String(d.getUTCDate()).padStart(2, '0')}-${Str
 const ucYilOnce = () => { const d = new Date(); d.setUTCFullYear(d.getUTCFullYear() - 3); return d }
 
 async function evds(anahtar: string): Promise<{ satirlar: Satir[]; durum: number; bas: string }> {
-  const url = `https://evds2.tcmb.gov.tr/service/evds/series=TP.FG.J0&startDate=${evdsTarih(ucYilOnce())}&endDate=${evdsTarih(new Date())}&type=json&frequency=5`
+  const url = `https://evds3.tcmb.gov.tr/igmevdsms-dis/series=TP.FG.J0&startDate=${evdsTarih(ucYilOnce())}&endDate=${evdsTarih(new Date())}&type=json&frequency=5`
   const r = await fetch(url, { headers: { key: anahtar, Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 finans-takip' }, signal: AbortSignal.timeout(ZAMAN_ASIMI), cache: 'no-store' })
   const metin = await r.text()
   const bas = `[${r.status} ${r.headers.get('content-type') ?? ''}] ${metin.replace(/\s+/g, ' ').slice(0, 400)}`
