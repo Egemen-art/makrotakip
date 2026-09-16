@@ -28,9 +28,10 @@ async function evds(anahtar: string): Promise<{ satirlar: Satir[]; durum: number
   const url = `https://evds2.tcmb.gov.tr/service/evds/series=TP.FG.J0&startDate=${evdsTarih(ucYilOnce())}&endDate=${evdsTarih(new Date())}&type=json&frequency=5`
   const r = await fetch(url, { headers: { key: anahtar, Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 finans-takip' }, signal: AbortSignal.timeout(ZAMAN_ASIMI), cache: 'no-store' })
   const metin = await r.text()
-  const bas = metin.slice(0, 300)
+  const bas = `[${r.status} ${r.headers.get('content-type') ?? ''}] ${metin.replace(/\s+/g, ' ').slice(0, 400)}`
   if (!r.ok) return { satirlar: [], durum: r.status, bas }
-  const j = JSON.parse(metin) as { items?: Record<string, string | null>[] }
+  let j: { items?: Record<string, string | null>[] }
+  try { j = JSON.parse(metin) } catch { return { satirlar: [], durum: r.status, bas } }
   const satirlar: Satir[] = []
   for (const it of j.items ?? []) {
     const k = Object.keys(it).find((x) => x.startsWith('TP_FG_J0'))
@@ -49,9 +50,10 @@ async function fred(anahtar: string, seri: 'CPIAUCSL' | 'PCEPI'): Promise<{ sati
   const url = `https://api.stlouisfed.org/fred/series/observations?series_id=${seri}&api_key=${encodeURIComponent(anahtar)}&file_type=json&observation_start=${tarih(ucYilOnce())}`
   const r = await fetch(url, { signal: AbortSignal.timeout(ZAMAN_ASIMI), cache: 'no-store' })
   const metin = await r.text()
-  const bas = metin.slice(0, 300)
+  const bas = `[${r.status}] ${metin.slice(0, 300)}`
   if (!r.ok) return { satirlar: [], durum: r.status, bas }
-  const j = JSON.parse(metin) as { observations?: { date: string; value: string }[] }
+  let j: { observations?: { date: string; value: string }[] }
+  try { j = JSON.parse(metin) } catch { return { satirlar: [], durum: r.status, bas } }
   const satirlar = (j.observations ?? [])
     .filter((o) => o.value !== '.' && Number.isFinite(Number(o.value)))
     .map((o) => ({ ay: o.date, endeks: Number(o.value) }))
