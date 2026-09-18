@@ -50,12 +50,15 @@ export async function panoVerisi(seciliAy: string) {
     sb.from('taksit_plani').select('*'),
     sb.from('islemler').select('id, taksit_plan_id, taksit_no, tarih, tutar').not('taksit_plan_id', 'is', null),
     // Enflasyon (karar 53): kur seridi kutulari ve baslangictan beri reel.
-    sb.from('v_enflasyon').select('*').order('ay'),
-    sb.from('v_portfoy_performans').select('*').order('tarih'),
+    sb.from('v_enflasyon').select('*').order('ay').limit(5000),
+    sb.from('v_portfoy_performans').select('*').order('tarih').limit(5000),
     // ABD faizleri (FRED): 10Y, 2Y, Fed araligi — kur seridi kutulari ve donem farki.
-    sb.from('abd_faiz').select('seri, tarih, deger').order('tarih'),
+    // Son 210 gun yeter (en uzun donem filtresi 6 ay) ve PostgREST'in 1000 satir
+    // varsayilanina takilmaz: tablo ~400 gun x 5 seri tutuyor, limitsiz cekilirse
+    // en ESKI 1000 satir gelir ve kutular aylar oncesini gosterir (18.09 hatasi).
+    sb.from('abd_faiz').select('seri, tarih, deger').gte('tarih', gunEkle(bugun(), -210)).order('tarih').limit(5000),
     // Turkiye faizleri: TCMB politika (degisiklik tarihleri), TR 10Y / 2Y gosterge tahvil.
-    sb.from('tr_faiz').select('seri, tarih, deger').order('tarih'),
+    sb.from('tr_faiz').select('seri, tarih, deger').order('tarih').limit(5000),
     // Yaklasan onemli tarihler (14 gun).
     sb.from('takvim').select('*').gte('tarih', bugun()).lte('tarih', gunEkle(bugun(), 14)).order('tarih').order('saat'),
   ])

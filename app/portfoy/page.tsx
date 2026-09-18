@@ -36,8 +36,9 @@ export default async function PortfoySayfasi({
     sb.from('v_portfoy_bugun').select('*').limit(1),
     sb.from('v_portfoy_sinif').select('*'),
     sb.from('v_varlik_deger').select('*'),
-    sb.from('v_portfoy_performans').select('*').order('tarih'),
-    sb.from('v_varlik_performans').select('*').order('tarih'),
+    sb.from('v_portfoy_performans').select('*').order('tarih').limit(5000),
+    // Kalem x gun: 11 kalem x 1 yil ~ 4000 satir; PostgREST varsayilani 1000, acikca yukseltilir.
+    sb.from('v_varlik_performans').select('*').order('tarih').limit(20000),
     // Bugunku degerleri dolara cevirmek icin gunun kuru (gecmis kendi kuruyla cevrilir).
     sb.from('kur_gunluk').select('tarih, usdtry').order('tarih', { ascending: false }).limit(1).maybeSingle(),
     // Gun gorunumu: secili gunun olcumleri (olcumden olcume zincir).
@@ -48,9 +49,9 @@ export default async function PortfoySayfasi({
       ? sb.from('v_varlik_olcum_performans').select('*').eq('tarih', donem.gun).order('olcum_zamani')
       : Promise.resolve({ data: [], error: null }),
     // Para akislari: hareketler + varligin kodu.
-    sb.from('varlik_hareket').select('*, varlik(kod, sinif)').order('tarih', { ascending: false }).order('id', { ascending: false }).limit(500),
+    sb.from('varlik_hareket').select('*, varlik(kod, sinif)').order('tarih', { ascending: false }).order('id', { ascending: false }).limit(2000),
     // Aylik fiyat endeksleri (tufe / cpi / pce) — reel getiri icin.
-    sb.from('v_enflasyon').select('*').order('ay'),
+    sb.from('v_enflasyon').select('*').order('ay').limit(5000),
   ])
   const error = [bugunku.error, siniflar.error, degerler.error, toplam.error, kalemler.error, gunToplam.error, gunKalemler.error, hareketler.error, enflasyon.error].find(Boolean)
   const enflasyonSatirlari = (enflasyon.data ?? []) as EnflasyonSatiri[]
