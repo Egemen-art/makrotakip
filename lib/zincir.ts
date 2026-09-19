@@ -15,7 +15,7 @@ import type { PortfoyOlcumPerformans, VarlikOlcumPerformans, VarlikPerformans } 
  * Nakit kaleminde akis = deger degisimi oldugu icin r dogal olarak 0 cikar.
  */
 
-export type ZincirSatiri = { tarih: string; r: number; deger: number }
+export type ZincirSatiri = { tarih: string; r: number; deger: number; akis: number }
 
 const sayi = (v: string | null | undefined) => Number(v ?? 0)
 
@@ -37,7 +37,7 @@ export function gunlukZincir(satirlar: VarlikPerformans[], dolar: boolean): Zinc
   const sonuc: ZincirSatiri[] = []
   let onceki: number | null = null
   for (const [tarih, v] of [...gunler.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-    sonuc.push({ tarih, r: adim(v.deger, onceki, v.akis), deger: v.deger })
+    sonuc.push({ tarih, r: adim(v.deger, onceki, v.akis), deger: v.deger, akis: v.akis })
     onceki = v.deger
   }
   return sonuc

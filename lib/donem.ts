@@ -84,7 +84,10 @@ export function donemAdresi(yol: string, d: Partial<Donem> & { kod: DonemKodu },
   return s ? `${yol}?${s}` : yol
 }
 
-export type ZincirNoktasi = { tarih: string; yuzde: number; deger: number }
+/** yuzde: donem basindan beri birikimli getiri. kazanc: ayni donemin PARASAL
+ *  karsiligi — para akislarindan arindirilmis (deger farki eksi akis), yani
+ *  "bu donemde ne kazandim" sorusunun tutar cevabi. */
+export type ZincirNoktasi = { tarih: string; yuzde: number; deger: number; kazanc: number }
 
 /**
  * Gunluk zincirin donem kesiti. `getiri` satirin gunluk getirisi (%, onceki
@@ -96,6 +99,7 @@ export function donemZinciri<T extends { tarih: string }>(
   donem: Donem,
   getiri: (s: T) => number,
   deger: (s: T) => number,
+  akis?: (s: T) => number,
 ): ZincirNoktasi[] {
   const sirali = satirlar.filter((s) => s.tarih <= donem.bit).sort((a, b) => a.tarih.localeCompare(b.tarih))
   if (sirali.length === 0) return []
@@ -105,11 +109,17 @@ export function donemZinciri<T extends { tarih: string }>(
     const oncekiler = sirali.filter((s) => s.tarih <= donem.bas!)
     basIdx = oncekiler.length > 0 ? sirali.indexOf(oncekiler[oncekiler.length - 1]) : 0
   }
-  const noktalar: ZincirNoktasi[] = [{ tarih: sirali[basIdx].tarih, yuzde: 0, deger: deger(sirali[basIdx]) }]
+  let oncekiDeger = deger(sirali[basIdx])
+  const noktalar: ZincirNoktasi[] = [{ tarih: sirali[basIdx].tarih, yuzde: 0, deger: oncekiDeger, kazanc: 0 }]
   let carpan = 1
+  let kazanc = 0
   for (const s of sirali.slice(basIdx + 1)) {
     carpan *= 1 + getiri(s) / 100
-    noktalar.push({ tarih: s.tarih, yuzde: (carpan - 1) * 100, deger: deger(s) })
+    const d = deger(s)
+    // Parasal kazanc: deger farkindan o gunun akisi dusulur; eklenen para kazanc sayilmaz.
+    kazanc += d - oncekiDeger - (akis ? akis(s) : 0)
+    noktalar.push({ tarih: s.tarih, yuzde: (carpan - 1) * 100, deger: d, kazanc })
+    oncekiDeger = d
   }
   return noktalar
 }

@@ -91,7 +91,7 @@ export function reelZincir(satirlar: ZincirSatiri[], d: Deflator): { satirlar: Z
     if (!e) { eksik = true; sonuc.push({ ...s, r: s.r }); onceki = null; continue }
     if (e.gecici) gecici = true
     const r = onceki === null ? 0 : ((1 + s.r / 100) / (e.deger / onceki.deger) - 1) * 100
-    sonuc.push({ tarih: s.tarih, r, deger: s.deger })
+    sonuc.push({ tarih: s.tarih, r, deger: s.deger, akis: s.akis })
     onceki = e
   }
   return { satirlar: sonuc, gecici, eksik }
@@ -123,7 +123,7 @@ export function kumulatifGetiri(satirlar: ZincirSatiri[]): number | null {
 
 /** Toplam portfoy zincirinin (v_portfoy_performans) nominal ve reel birikimli getirisi. */
 export function baslangictanReel(
-  toplam: { tarih: string; deger_tl: string | null; deger_usd: string | null; gun_yuzde: string | null; gun_yuzde_usd: string | null }[],
+  toplam: { tarih: string; deger_tl: string | null; deger_usd: string | null; akis_tl: string | null; akis_usd: string | null; gun_yuzde: string | null; gun_yuzde_usd: string | null }[],
   enflasyon: EnflasyonSatiri[],
   dolar: boolean,
   abdSeri: Exclude<EnflasyonSerisi, 'tufe'> = 'cpi',
@@ -131,7 +131,12 @@ export function baslangictanReel(
   const seri: EnflasyonSerisi = dolar ? abdSeri : 'tufe'
   const rows: ZincirSatiri[] = [...toplam]
     .sort((a, b) => a.tarih.localeCompare(b.tarih))
-    .map((t) => ({ tarih: t.tarih, r: Number((dolar ? t.gun_yuzde_usd : t.gun_yuzde) ?? 0), deger: Number((dolar ? t.deger_usd : t.deger_tl) ?? 0) }))
+    .map((t) => ({
+      tarih: t.tarih,
+      r: Number((dolar ? t.gun_yuzde_usd : t.gun_yuzde) ?? 0),
+      deger: Number((dolar ? t.deger_usd : t.deger_tl) ?? 0),
+      akis: Number((dolar ? t.akis_usd : t.akis_tl) ?? 0),
+    }))
   const nominal = kumulatifGetiri(rows)
   const d = deflatorKur(enflasyon, seri)
   if (!d) return { nominal, reel: null, enflasyon: null, gecici: false, seri, sonAy: null }

@@ -28,6 +28,9 @@ import GunIci from './GunIci'
 const GRUP_SIRASI = ['hisse', 'fon', 'altin', 'bes', 'nakit', 'mevduat', 'diger']
 const grupRengi = (g: string) => SERI_RENKLERI[Math.max(0, GRUP_SIRASI.indexOf(g)) % SERI_RENKLERI.length]
 
+/** Isaretli tutar: kazanc +, kayip −. */
+const tutarMetni = (n: number, bicim: (x: number) => string) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${bicim(Math.abs(n))}`
+
 const yuzdeMetni = (v: string | null | undefined) => {
   if (v === null || v === undefined) return '—'
   const n = Number(v)
@@ -88,13 +91,15 @@ export default function PortfoyPerformansGorunumu({
   // Gecici bayragi: zincirin herhangi bir gunu henuz aciklanmamis aya dusuyorsa.
   const kesit = (satirlar: ZincirSatiri[]) => {
     const z = reelAktif ? reelZincir(satirlar, deflator!) : { satirlar, gecici: false, eksik: false }
-    const zincir = donemZinciri(z.satirlar, donem, (x) => x.r, (x) => x.deger)
+    const zincir = donemZinciri(z.satirlar, donem, (x) => x.r, (x) => x.deger, (x) => x.akis)
     // Reel gorunumde nominal kesit de tutulur: "nominal · enflasyon · reel" satiri icin.
-    const nominal = reelAktif ? donemZinciri(satirlar, donem, (x) => x.r, (x) => x.deger) : zincir
+    // Parasal kazanc her iki kesitte de ayni (nominal), cunku deger ve akis degismiyor.
+    const nominal = reelAktif ? donemZinciri(satirlar, donem, (x) => x.r, (x) => x.deger, (x) => x.akis) : zincir
     return { zincir, nominal, gecici: z.gecici, eksik: z.eksik }
   }
   const toplamZinciri = (): ZincirSatiri[] =>
-    [...toplam].sort((a, b) => a.tarih.localeCompare(b.tarih)).map((t) => ({ tarih: t.tarih, r: gunlukR(t), deger: gunlukDeger(t) }))
+    [...toplam].sort((a, b) => a.tarih.localeCompare(b.tarih))
+      .map((t) => ({ tarih: t.tarih, r: gunlukR(t), deger: gunlukDeger(t), akis: Number((dolar ? t.akis_usd : t.akis_tl) ?? 0) }))
 
   // Kalem bazinda DONEM getirisi — listede yanina yazilir; null = donemde olcum yok.
   const donemGetirileri = useMemo(() => {
@@ -311,18 +316,29 @@ export default function PortfoyPerformansGorunumu({
                 )}
               </p>
               {son && seri.length >= 2 && (
-                <span
-                  className="rakam text-[17px] font-semibold"
-                  style={{ color: son.yuzde > 0 ? 'var(--artis-iyi)' : son.yuzde < 0 ? 'var(--kritik)' : 'var(--ink)' }}
-                >
-                  {yuzdeMetni(String(son.yuzde))}
+                <span className="text-right">
+                  <span
+                    className="rakam block text-[17px] font-semibold leading-tight"
+                    style={{ color: son.yuzde > 0 ? 'var(--artis-iyi)' : son.yuzde < 0 ? 'var(--kritik)' : 'var(--ink)' }}
+                  >
+                    {yuzdeMetni(String(son.yuzde))}
+                  </span>
+                  <span
+                    className="rakam block text-[12px]"
+                    title="Dönemin parasal karşılığı: değer farkından para akışları düşülmüş"
+                    style={{ color: son.kazanc > 0 ? 'var(--artis-iyi)' : son.kazanc < 0 ? 'var(--kritik)' : 'var(--ink-muted)' }}
+                  >
+                    {tutarMetni(son.kazanc, bicim)}
+                  </span>
                 </span>
               )}
             </div>
 
             {reelAktif && seri.length >= 2 && nominalSon && donemEnf && (
               <p className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[12px]" style={{ color: 'var(--ink-2)' }}>
-                <span>Nominal <span className="rakam font-medium" style={{ color: nominalSon.yuzde > 0 ? 'var(--artis-iyi)' : nominalSon.yuzde < 0 ? 'var(--kritik)' : 'var(--ink)' }}>{yuzdeMetni(String(nominalSon.yuzde))}</span></span>
+                <span>Nominal <span className="rakam font-medium" style={{ color: nominalSon.yuzde > 0 ? 'var(--artis-iyi)' : nominalSon.yuzde < 0 ? 'var(--kritik)' : 'var(--ink)' }}>{yuzdeMetni(String(nominalSon.yuzde))}</span>
+                  <span className="rakam ml-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>({tutarMetni(nominalSon.kazanc, bicim)})</span>
+                </span>
                 <span>Enflasyon <span className="rakam font-medium">{yuzdeMetni(String(donemEnf.yuzde))}</span>
                   <span className="ml-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>({SERI_ETIKETI[enfSeri]}, {tarihKisa(seri[0].tarih)} → {tarihKisa(seri[seri.length - 1].tarih)}{donemEnf.gecici ? ', geçici' : ''})</span>
                 </span>
@@ -348,11 +364,15 @@ export default function PortfoyPerformansGorunumu({
                     <Tooltip
                       content={({ active, payload, label }) => {
                         if (!active || !payload?.length) return null
-                        const p = payload[0].payload as { yuzde: number; deger: number }
+                        const p = payload[0].payload as { yuzde: number; deger: number; kazanc: number }
                         return (
                           <div className="kart px-3 py-2 text-[12px] shadow-lg" style={{ background: 'var(--surface)' }}>
                             <div className="font-medium">{tarihKisa(String(label))}</div>
-                            <div className="rakam">{yuzdeMetni(String(p.yuzde))} · {bicim(p.deger)}</div>
+                            <div className="rakam">
+                              {yuzdeMetni(String(p.yuzde))}
+                              <span style={{ color: p.kazanc > 0 ? 'var(--artis-iyi)' : p.kazanc < 0 ? 'var(--kritik)' : 'var(--ink-muted)' }}> · {tutarMetni(p.kazanc, bicim)}</span>
+                            </div>
+                            <div className="rakam text-[11px]" style={{ color: 'var(--ink-muted)' }}>değer {bicim(p.deger)}</div>
                           </div>
                         )
                       }}
