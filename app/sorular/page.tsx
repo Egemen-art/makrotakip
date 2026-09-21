@@ -10,10 +10,10 @@ export default async function SorularSayfasi() {
 
   // Tek turda paralel — Tokyo gidis-donusu bir kez odenir.
   const [bekleyen, kurallar, gecmis, taksonomi] = await Promise.all([
-    sb.from('islemler').select('*').eq('durum', 'Soruldu')
+    sb.from('islemler').select('*').eq('durum', 'Soruldu').limit(5000)
       .order('tarih', { ascending: false }).order('id', { ascending: false }),
     sb.from('kural_seti').select('*'),
-    sb.from('islemler').select('*').neq('durum', 'Soruldu')
+    sb.from('islemler').select('*').neq('durum', 'Soruldu').limit(20000)
       .order('tarih', { ascending: false }).limit(400),
     sb.from('taksonomi').select('*'),
   ])

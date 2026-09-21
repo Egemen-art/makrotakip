@@ -36,7 +36,10 @@ export async function panoVerisi(seciliAy: string) {
     sb.from('islemler').select('*').order('tarih', { ascending: false }).order('id', { ascending: false }).limit(15),
     sb.from('islemler').select('id', { count: 'exact', head: true }).eq('durum', 'Soruldu'),
     sb.rpc('kategori_bant', { ref_ay: seciliAy }),
-    sb.from('v_aylik_kategori').select('ay,yon,kategori,alt,toplam,adet'),
+    // Ay x yon x kategori x alt: her ay ~40 satir buyuyor. 21.09.2026'da 897 satirdi;
+    // limit yazilmazsa PostgREST'in 1000 varsayilaniyla EN ESKI 1000 satir gelir ve
+    // pano kirilimi sessizce en yeni aylari dusurur (bkz. 18.09 faiz kutusu hatasi).
+    sb.from('v_aylik_kategori').select('ay,yon,kategori,alt,toplam,adet').limit(50000),
     // Anlik nakit (karar 49). Aya bagli degil: hangi ay secili olursa olsun BUGUNKU nakit.
     sb.from('v_nakit').select('*').limit(1),
     // Adet bazli guncel portfoy; anlik goruntu tablosunun yerini almaz.
@@ -47,8 +50,8 @@ export async function panoVerisi(seciliAy: string) {
     // Gunun kuru: varlik seridinin dolar gorunumu bununla cevrilir.
     sb.from('kur_gunluk').select('tarih, usdtry').order('tarih', { ascending: false }).limit(1).maybeSingle(),
     // Gidere henuz yansimayan taksitler: bitmemis tum planlar + deftere yazilmis taksit satirlari.
-    sb.from('taksit_plani').select('*'),
-    sb.from('islemler').select('id, taksit_plan_id, taksit_no, tarih, tutar').not('taksit_plan_id', 'is', null),
+    sb.from('taksit_plani').select('*').limit(5000),
+    sb.from('islemler').select('id, taksit_plan_id, taksit_no, tarih, tutar').not('taksit_plan_id', 'is', null).limit(5000),
     // Enflasyon (karar 53): kur seridi kutulari ve baslangictan beri reel.
     sb.from('v_enflasyon').select('*').order('ay').limit(5000),
     sb.from('v_portfoy_performans').select('*').order('tarih').limit(5000),

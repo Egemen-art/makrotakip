@@ -50,7 +50,7 @@ export default async function IslemlerSayfasi({
       .order('id', { ascending: false })
       .range(bas, bas + SAYFA_BOYU - 1),
     sb.from('taksonomi').select('*'),
-    sb.from('islemler').select('hesap'),
+    sb.from('islemler').select('hesap').limit(20000),
   ])
 
   const kayitlar = (liste.data ?? []) as Islem[]

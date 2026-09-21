@@ -18,10 +18,10 @@ const YUK_RENGI: Record<string, string> = {
 export default async function TaksitlerSayfasi() {
   const sb = await supabaseSunucu()
   const [{ data, error }, kartlar, yazilanlar] = await Promise.all([
-    sb.from('taksit_plani').select('*').order('durum').order('aylik_tutar', { ascending: false }),
+    sb.from('taksit_plani').select('*').order('durum').order('aylik_tutar', { ascending: false }).limit(5000),
     sb.from('kartlar').select('kod, kesim_gunu'),
     // Deftere yazilmis taksit satirlari: bekleyenleri bunlardan ayiklamak icin.
-    sb.from('islemler').select('id, taksit_plan_id, taksit_no, tarih, tutar').not('taksit_plan_id', 'is', null),
+    sb.from('islemler').select('id, taksit_plan_id, taksit_no, tarih, tutar').not('taksit_plan_id', 'is', null).limit(5000),
   ])
 
   const planlar = (data ?? []) as TaksitPlani[]
