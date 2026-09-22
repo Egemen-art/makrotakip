@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { supabaseSunucu } from '@/lib/supabase/server'
-import { sayiOku, bugun } from '@/lib/bicim'
+import { sayiOku, bugun, tarihKisa } from '@/lib/bicim'
 import { fiyatGecmisi, kurTarihli } from '@/lib/fiyatKaynak'
 import { dogrudanDepo, gunlukOlcum, olcumOzeti, varligaKaynak } from '@/lib/olcum'
 import {
@@ -127,6 +127,21 @@ export async function hareketEkle(form: FormData): Promise<Sonuc> {
     if (k !== null) usdtry = Math.round(k * 10000) / 10000
   }
 
+  // GERIYE DONUK HAREKET (karar 50 istisnasi, Egemen 22.09.2026): islem tarihi
+  // bugunden onceyse o tarihten itibaren alinmis olcumlerin miktari ve degeri
+  // veritabanindaki tetikleyici tarafindan yeniden hesaplanir. Kac olcumun
+  // etkilenecegini INSERT'ten ONCE sayariz — tetikleyici sonrasinda is bitmis olur.
+  const geriDonuk = tarih < bugun()
+  let etkilenen = 0
+  if (geriDonuk) {
+    const { count } = await sb
+      .from('portfoy_olcum')
+      .select('olcum_zamani', { count: 'exact', head: true })
+      .eq('varlik_id', varlikId)
+      .gte('tarih', tarih)
+    etkilenen = count ?? 0
+  }
+
   const { error } = await sb.from('varlik_hareket').insert({
     varlik_id: varlikId,
     tarih,
@@ -140,8 +155,16 @@ export async function hareketEkle(form: FormData): Promise<Sonuc> {
   })
   if (error) return { tamam: false, hata: error.message }
   revalidatePath('/portfoy/varliklar')
+  revalidatePath('/portfoy')
+  revalidatePath('/')
   if (tur === 'Düzeltme') {
     bilgi = `${varlik?.kod ?? 'Varlık'} adedi ${miktar} olarak ayarlandı${bilgi ? ` · ${bilgi}` : ''}`
+  }
+  if (geriDonuk) {
+    const ek = etkilenen > 0
+      ? `Geriye dönük hareket: ${tarihKisa(tarih)} ve sonrasındaki ${etkilenen} ölçüm yeniden hesaplandı (fiyatlar değişmedi, yalnızca adet ve değer).`
+      : `Geriye dönük hareket: ${tarihKisa(tarih)} tarihinden sonra ölçüm yok, yeniden hesaplanacak bir şey çıkmadı.`
+    bilgi = bilgi ? `${bilgi} · ${ek}` : ek
   }
   return { tamam: true, bilgi }
 }

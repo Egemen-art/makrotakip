@@ -194,6 +194,10 @@ export default function VarlikYonetimi({
               — döviz kalemlerinde o günün kuruyla, bugünkünle değil. Tutar yalnızca <em>getiri</em>
               için gerekli; <em>değer</em> zaten adet × güncel fiyattan çıkıyor. İkisini de boş
               bırakırsan kalem değerlenir ama maliyeti bilinmediği için getirisi hesaplanmaz.
+              <br />
+              <strong>Geçmiş tarih</strong> yazabilirsin: o tarihten sonraki ölçümlerin adedi ve
+              değeri yeniden hesaplanır, böylece aradaki fiyat hareketi getirine girer. Ölçümün
+              <em> fiyatı</em> hiç değişmez — yalnızca kaç adet tuttuğun düzelir.
             </p>
           </form>
         </div>
