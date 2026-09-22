@@ -2,9 +2,10 @@
 
 import { useMemo } from 'react'
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import type { Para, PortfoyOlcumPerformans, VarlikOlcumPerformans } from '@/lib/tipler-varlik'
+import type { Para, PortfoyOlcumPerformans, VarlikOlcumPerformans, VarlikSinif } from '@/lib/tipler-varlik'
 import { SINIF_ETIKETI } from '@/lib/tipler-varlik'
 import { tarihKisa, tl, usd } from '@/lib/bicim'
+import { birimFiyat, birimMetni, type FiyatPara } from '@/lib/birim'
 import { EKSEN_STILI, eksenTL, eksenUSD } from './grafik/ortak'
 
 /**
@@ -27,7 +28,7 @@ const renk = (n: number) => (n > 0 ? 'var(--artis-iyi)' : n < 0 ? 'var(--kritik)
 const zincirle = (adimlar: number[]) => (adimlar.reduce((c, r) => c * (1 + r / 100), 1) - 1) * 100
 
 export default function GunIci({
-  gun, toplam, kalemler, para = 'TRY', secimAdi = null,
+  gun, toplam, kalemler, para = 'TRY', secimAdi = null, birim,
 }: {
   gun: string
   toplam: PortfoyOlcumPerformans[]
@@ -35,6 +36,8 @@ export default function GunIci({
   para?: Para
   /** Pastada bir grup ya da kalem secildiyse adi; baslikta yazilir. */
   secimAdi?: string | null
+  /** Tek KALEM secildiyse: o kalemin birim fiyati her olcum icin ayrica yazilir. */
+  birim?: { varlikId: number; para: FiyatPara; sinif: VarlikSinif }
 }) {
   const dolar = para === 'USD'
   const bicim = dolar ? usd : tl
@@ -71,7 +74,23 @@ export default function GunIci({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kalemler, gun, dolar])
 
-  const cizgi = olcumler.map((o) => ({ saat: saat(o.olcum_zamani), deger: deger(o) }))
+  // Olcum zamani -> secili kalemin o andaki birim fiyati (kendi kotasyon parasinda).
+  const birimHarita = useMemo(() => {
+    if (!birim) return null
+    const m = new Map<string, number>()
+    for (const k of kalemler) {
+      if (k.varlik_id !== birim.varlikId || k.tarih !== gun) continue
+      const f = birimFiyat(k, birim.para)
+      if (f !== null) m.set(k.olcum_zamani, f)
+    }
+    return m.size === 0 ? null : m
+  }, [birim, kalemler, gun])
+
+  const cizgi = olcumler.map((o) => ({
+    saat: saat(o.olcum_zamani),
+    deger: deger(o),
+    birim: birimHarita?.get(o.olcum_zamani) ?? null,
+  }))
   const ilk = olcumler[0]
   const son = olcumler[olcumler.length - 1]
   const gunIciToplam = olcumler.length >= 2 ? zincirle(olcumler.slice(1).map(adim)) : null
@@ -108,6 +127,7 @@ export default function GunIci({
             <tr className="text-left text-[11px]" style={{ color: 'var(--ink-muted)' }}>
               <th className="py-1 font-normal">Saat</th>
               <th className="py-1 text-right font-normal">Değer</th>
+              {birimHarita && <th className="py-1 text-right font-normal" title="Kalemin o andaki birim fiyatı">Birim</th>}
               <th className="py-1 text-right font-normal">Fark</th>
               <th className="py-1 text-right font-normal">%</th>
               <th className="py-1 text-right font-normal">Akış</th>
@@ -124,6 +144,14 @@ export default function GunIci({
                 <tr key={o.olcum_zamani} style={{ borderTop: '1px solid var(--hair)' }}>
                   <td className="rakam py-1.5">{saat(o.olcum_zamani)}</td>
                   <td className="rakam py-1.5 text-right font-medium">{bicim(deger(o))}</td>
+                  {birimHarita && (
+                    <td className="rakam py-1.5 text-right" style={{ color: 'var(--ink-muted)' }}>
+                      {(() => {
+                        const n = birimHarita.get(o.olcum_zamani)
+                        return n === undefined ? '—' : birimMetni(n, birim!.para, birim!.sinif)
+                      })()}
+                    </td>
+                  )}
                   <td className="rakam py-1.5 text-right" style={{ color: fark === null ? 'var(--ink-muted)' : renk(fark) }}>
                     {fark === null ? '—' : `${fark > 0 ? '+' : ''}${bicim(fark)}`}
                   </td>
@@ -153,10 +181,16 @@ export default function GunIci({
               <Tooltip
                 content={({ active, payload, label }) => {
                   if (!active || !payload?.length) return null
+                  const n = (payload[0].payload as { birim: number | null }).birim
                   return (
                     <div className="kart px-3 py-2 text-[12px] shadow-lg" style={{ background: 'var(--surface)' }}>
                       <div className="font-medium">{String(label)}</div>
                       <div className="rakam">{bicim(Number(payload[0].value))}</div>
+                      {birim && n !== null && (
+                        <div className="rakam text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+                          birim {birimMetni(n, birim.para, birim.sinif)}
+                        </div>
+                      )}
                     </div>
                   )
                 }}

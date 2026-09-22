@@ -9,6 +9,7 @@ import type {
 } from '@/lib/tipler-varlik'
 import { GRUP_ETIKETI, SINIF_ETIKETI, SINIF_GRUBU } from '@/lib/tipler-varlik'
 import { tarihKisa, tl, usd, yuzde } from '@/lib/bicim'
+import { BIRIM_ADI, birimAnlamli, birimFiyat, birimMetni } from '@/lib/birim'
 import { donemBasligi, donemGetirisi, donemZinciri, type Donem } from '@/lib/donem'
 import { gunlukZincir, olcumZinciri, type ZincirSatiri } from '@/lib/zincir'
 import { deflatorKur, donemEnflasyonu, reelZincir, SERI_ETIKETI, type EnflasyonSatiri, type EnflasyonSerisi } from '@/lib/enflasyon'
@@ -148,6 +149,21 @@ export default function PortfoyPerformansGorunumu({
       varlikId !== null ? k.varlik_id === varlikId : (SINIF_GRUBU[k.sinif] ?? 'diger') === grup)
     return { toplam: olcumZinciri(uyeler), kalemler: uyeler }
   }, [gunIci, varlikId, grup])
+  // Secili KALEMIN birim fiyati: tarih -> kendi kotasyon para birimindeki fiyat.
+  // Grup ya da toplam secildiyse birim fiyat tanimsiz (farkli kalemler, farkli birim).
+  const birimler = useMemo(() => {
+    if (varlikId === null) return null
+    const v = degerler.find((d) => d.varlik_id === varlikId)
+    if (!v || !birimAnlamli(v.miktar)) return null
+    const m = new Map<string, number>()
+    for (const k of kalemler) {
+      if (k.varlik_id !== varlikId) continue
+      const f = birimFiyat(k, v.fiyat_para)
+      if (f !== null) m.set(k.tarih, f)
+    }
+    return m.size === 0 ? null : { harita: m, para: v.fiyat_para, sinif: v.sinif }
+  }, [varlikId, degerler, kalemler])
+
   const son = seri.at(-1)
   const donemAdi = donemBasligi(donem)
   // Donemdeki enflasyon: kesitin ilk ve son gunu arasinda endeks degisimi.
@@ -159,6 +175,10 @@ export default function PortfoyPerformansGorunumu({
     ? SINIF_GRUBU[seciliVarlik.sinif] ?? 'diger'
     : seciliGrup?.ad ?? null
   const cizgiRengi = seciliGrupAdi ? grupRengi(seciliGrupAdi) : 'var(--seri-1)'
+  // Baslikta ve gun ici gorunumunde kullanilan anlik birim fiyat metni.
+  const anlikBirim = seciliVarlik && birimAnlamli(seciliVarlik.miktar) && seciliVarlik.birim_fiyat !== null
+    ? birimMetni(Number(seciliVarlik.birim_fiyat), seciliVarlik.fiyat_para, seciliVarlik.sinif)
+    : null
   const secimAdi = seciliVarlik
     ? seciliVarlik.kod
     : seciliGrup
@@ -252,6 +272,11 @@ export default function PortfoyPerformansGorunumu({
                         const secili = varlikId === u.varlik_id
                         const k = donemGetirileri.get(u.varlik_id) ?? null
                         const uDeger = cevir(Number(u.deger_tl))
+                        // Anlik birim fiyat: kalemin KENDI kotasyon para biriminde
+                        // (ekranin ₺/$ secimi degeri cevirir, kotasyonu degil).
+                        const uBirim = birimAnlamli(u.miktar) && u.birim_fiyat !== null
+                          ? birimMetni(Number(u.birim_fiyat), u.fiyat_para, u.sinif)
+                          : null
                         return (
                           <li key={u.varlik_id}>
                             <button
@@ -263,6 +288,15 @@ export default function PortfoyPerformansGorunumu({
                               <span className="truncate" style={{ fontWeight: secili ? 600 : 400 }}>
                                 {u.kod}
                                 <span className="ml-1.5 text-[11px]" style={{ color: 'var(--ink-muted)' }}>{SINIF_ETIKETI[u.sinif]}</span>
+                                {uBirim && (
+                                  <span
+                                    className="rakam ml-1.5 text-[11px]"
+                                    style={{ color: 'var(--ink-muted)' }}
+                                    title={`Anlık birim fiyat · ${Number(u.miktar).toLocaleString('tr-TR', { maximumFractionDigits: 6 })} ${BIRIM_ADI[u.sinif]}${u.fiyat_tarihi ? ` · ${tarihKisa(u.fiyat_tarihi)}` : ''}${u.fiyat_kaynagi ? ` · ${u.fiyat_kaynagi}` : ''}`}
+                                  >
+                                    {uBirim}
+                                  </span>
+                                )}
                               </span>
                               <span className="rakam ml-auto shrink-0">{bicim(uDeger)}</span>
                               <span className="rakam w-12 shrink-0 text-right text-[11px]" style={{ color: 'var(--ink-muted)' }}>
@@ -293,7 +327,13 @@ export default function PortfoyPerformansGorunumu({
         {donem.kod === 'gun' && gunIciSecili ? (
           <>
             {reelAktif && <p className="mb-2 text-[11px]" style={{ color: 'var(--ink-muted)' }}>Gün içi ölçümler nominaldir; gün içinde enflasyon ihmal edilir.</p>}
-            <GunIci gun={donem.gun} toplam={gunIciSecili.toplam} kalemler={gunIciSecili.kalemler} para={para} secimAdi={secimAdi} />
+            <GunIci
+              gun={donem.gun} toplam={gunIciSecili.toplam} kalemler={gunIciSecili.kalemler}
+              para={para} secimAdi={secimAdi}
+              birim={seciliVarlik && birimAnlamli(seciliVarlik.miktar)
+                ? { varlikId: seciliVarlik.varlik_id, para: seciliVarlik.fiyat_para, sinif: seciliVarlik.sinif }
+                : undefined}
+            />
           </>
         ) : (
           <>
@@ -307,6 +347,11 @@ export default function PortfoyPerformansGorunumu({
                 {reelAktif && seriGecici && (
                   <span className="ml-1.5 text-[11px]" style={{ color: 'var(--ciddi)' }} title={`Son açıklanan ay ${deflator!.sonAy}; sonrası son 3 ayın ortalamasıyla (aylık ${deflator!.geciciAylik.toFixed(2)} %) geçici`}>
                     geçici
+                  </span>
+                )}
+                {anlikBirim && (
+                  <span className="rakam ml-2 text-[11px]" style={{ color: 'var(--ink-muted)' }} title="Kalemin anlık birim fiyatı">
+                    birim {anlikBirim}
                   </span>
                 )}
                 {seri.length > 0 && (
@@ -365,6 +410,8 @@ export default function PortfoyPerformansGorunumu({
                       content={({ active, payload, label }) => {
                         if (!active || !payload?.length) return null
                         const p = payload[0].payload as { yuzde: number; deger: number; kazanc: number }
+                        // Tek kalem secildiyse o gunun birim fiyati da yazilir.
+                        const b = birimler?.harita.get(String(label)) ?? null
                         return (
                           <div className="kart px-3 py-2 text-[12px] shadow-lg" style={{ background: 'var(--surface)' }}>
                             <div className="font-medium">{tarihKisa(String(label))}</div>
@@ -373,6 +420,11 @@ export default function PortfoyPerformansGorunumu({
                               <span style={{ color: p.kazanc > 0 ? 'var(--artis-iyi)' : p.kazanc < 0 ? 'var(--kritik)' : 'var(--ink-muted)' }}> · {tutarMetni(p.kazanc, bicim)}</span>
                             </div>
                             <div className="rakam text-[11px]" style={{ color: 'var(--ink-muted)' }}>değer {bicim(p.deger)}</div>
+                            {birimler && b !== null && (
+                              <div className="rakam text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+                                birim {birimMetni(b, birimler.para, birimler.sinif)}
+                              </div>
+                            )}
                           </div>
                         )
                       }}
