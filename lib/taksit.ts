@@ -83,3 +83,68 @@ export function yansiyanTaksitler(
     .map((y) => ({ id: y.id, plan: planHaritasi.get(y.taksit_plan_id) ?? null, no: y.taksit_no, tarih: y.tarih, tutar: Number(y.tutar) }))
     .sort((a, b) => b.tarih.localeCompare(a.tarih) || b.tutar - a.tutar)
 }
+
+/**
+ * AYLIK TAKSIT DAGILIMI — hangi ay ne kadar taksit odedin, ne kadar kaldi.
+ *
+ * Kaynak deftere yazilmis satirlar DEGIL, PLANIN KENDISIDIR: defter yalnizca
+ * takip basladiktan sonraki taksitleri tasiyor (Eylul 2026'dan itibaren), oysa
+ * planlar ilk taksit ayindan itibaren tum takvimi biliyor. Boylece gecmis aylar
+ * da dogru gorunur.
+ *
+ * Son taksit yuvarlama artigini tasir: aylik_tutar x taksit_sayisi cogu planda
+ * toplam_tutar'i kurusu kurusuna tutmaz (13.446,63 / 4 = 3.361,6575), fark son
+ * taksite yazilir ve aylarin toplami toplam_tutar'a esitlenir.
+ */
+
+export type TaksitKalemi = {
+  urun: string
+  no: number
+  taksitSayisi: number
+  tutar: number
+  yukSahibi: string
+  odendi: boolean
+}
+
+export type TaksitAyi = {
+  /** 'YYYY-MM' */
+  ay: string
+  odenen: number
+  kalan: number
+  kalemler: TaksitKalemi[]
+}
+
+export function aylikTaksitDagilimi(planlar: TaksitPlani[]): TaksitAyi[] {
+  const aylar = new Map<string, TaksitAyi>()
+
+  for (const p of planlar) {
+    if (!p.ilk_taksit_ayi || p.taksit_sayisi < 1) continue
+    const aylik = Number(p.aylik_tutar)
+    const toplam = p.toplam_tutar === null ? null : Number(p.toplam_tutar)
+    for (let no = 1; no <= p.taksit_sayisi; no++) {
+      const ay = ayEkleYM(p.ilk_taksit_ayi, no - 1)
+      // Artik son taksite: onceki taksitlerin toplami toplam_tutar'dan dusulur.
+      const tutar = no === p.taksit_sayisi && toplam !== null
+        ? Math.round((toplam - aylik * (p.taksit_sayisi - 1)) * 100) / 100
+        : aylik
+      const odendi = no <= p.odenen_taksit
+      const kayit = aylar.get(ay) ?? { ay, odenen: 0, kalan: 0, kalemler: [] }
+      if (odendi) kayit.odenen += tutar
+      else kayit.kalan += tutar
+      kayit.kalemler.push({ urun: p.urun, no, taksitSayisi: p.taksit_sayisi, tutar, yukSahibi: p.yuk_sahibi, odendi })
+      aylar.set(ay, kayit)
+    }
+  }
+
+  for (const k of aylar.values()) k.kalemler.sort((a, b) => b.tutar - a.tutar)
+  const dolu = [...aylar.values()].sort((a, b) => a.ay.localeCompare(b.ay))
+  if (dolu.length === 0) return dolu
+
+  // Taksitsiz aralar BOS SUTUN olarak durur, atlanmaz: zaman ekseni atlanirsa
+  // iki ay arasindaki bosluk gorunmez olur ve grafik yanlis okunur.
+  const sonuc: TaksitAyi[] = []
+  for (let ay = dolu[0].ay; ay <= dolu[dolu.length - 1].ay; ay = ayEkleYM(ay, 1)) {
+    sonuc.push(aylar.get(ay) ?? { ay, odenen: 0, kalan: 0, kalemler: [] })
+  }
+  return sonuc
+}

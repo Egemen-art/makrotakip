@@ -1,8 +1,9 @@
 import { supabaseSunucu } from '@/lib/supabase/server'
 import type { Kart, TaksitPlani } from '@/lib/tipler'
 import { bugun, tl, tlKurus } from '@/lib/bicim'
-import { bekleyenTaksitler, yansiyanTaksitler } from '@/lib/taksit'
+import { aylikTaksitDagilimi, bekleyenTaksitler, yansiyanTaksitler } from '@/lib/taksit'
 import TaksitAkisi from '@/components/TaksitAkisi'
+import TaksitDagilimi from '@/components/TaksitDagilimi'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,6 +30,7 @@ export default async function TaksitlerSayfasi() {
   const yazilanSatirlar = (yazilanlar.data ?? []) as { id: number; taksit_plan_id: number; taksit_no: number | null; tarih: string; tutar: string }[]
   const bekleyen = bekleyenTaksitler(planlar, (kartlar.data ?? []) as Pick<Kart, 'kod' | 'kesim_gunu'>[], yazilanSatirlar, gunBugun)
   const yansiyan = yansiyanTaksitler(planlar, yazilanSatirlar, gunBugun.slice(0, 7))
+  const dagilim = aylikTaksitDagilimi(planlar)
   const aktif = planlar.filter((p) => p.durum === 'Aktif')
   const aylikToplam = aktif.reduce((t, p) => t + say(p.aylik_tutar), 0)
   const kalanToplam = aktif.reduce((t, p) => t + say(p.aylik_tutar) * p.kalan_taksit, 0)
@@ -77,6 +79,10 @@ export default async function TaksitlerSayfasi() {
               </div>
             ))}
         </div>
+      </div>
+
+      <div className="mt-4">
+        <TaksitDagilimi aylar={dagilim} buAy={gunBugun.slice(0, 7)} />
       </div>
 
       <div className="kart mt-4 overflow-x-auto">
