@@ -15,6 +15,7 @@ import ReelSecici from '@/components/ReelSecici'
 import PortfoyPerformansGorunumu from '@/components/PortfoyPerformans'
 import PortfoyBuyuklugu from '@/components/PortfoyBuyuklugu'
 import Kazanc from '@/components/Kazanc'
+import { SecimSaglayici } from '@/components/SecimBaglami'
 
 export const dynamic = 'force-dynamic'
 
@@ -104,6 +105,7 @@ export default async function PortfoySayfasi({
               reel={reelOzet}
             />
           </div>
+          <SecimSaglayici>
           <div className="mt-4">
             <PortfoyPerformansGorunumu
               degerler={(degerler.data ?? []) as VarlikDeger[]}
@@ -137,6 +139,7 @@ export default async function PortfoySayfasi({
               donem={donem} para={para} usdtry={usdtry}
             />
           </div>
+          </SecimSaglayici>
           <div className="mt-4">
             <ParaAkislari hareketler={(hareketler.data ?? []) as HareketKaydi[]} para={para} usdtry={usdtry} />
           </div>

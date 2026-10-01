@@ -7,6 +7,7 @@ import {
 import type { HareketKaydi, Para, PortfoyPerformans, VarlikPerformans } from '@/lib/tipler-varlik'
 import { hareketYerlestir, yonluTutar } from '@/lib/akis'
 import { donemBasligi, donemKesiti, type Donem } from '@/lib/donem'
+import { secimAdi, secimdeMi, useSecim } from './SecimBaglami'
 import { tarihKisa, tl, tlKurus, usd, usdKurus } from '@/lib/bicim'
 import { EKSEN_STILI, eksenTL, eksenUSD, ustSinir } from './grafik/ortak'
 
@@ -57,13 +58,32 @@ export default function PortfoyBuyuklugu({
   const bicimK = dolar ? usdKurus : tlKurus
   const cevir = (tlN: number, kur?: number | null) => (dolar ? tlN / (kur && kur > 0 ? kur : usdtry!) : tlN)
 
-  const { seri, onceki, oncekiNet, bekleyen, bekleyenNet } = useMemo(() => {
-    const seri: Nokta[] = toplam
-      .filter((t) => (dolar ? t.deger_usd : t.deger_tl) !== null)
-      .map((t) => ({ tarih: t.tarih, deger: num(dolar ? t.deger_usd : t.deger_tl), net: num(dolar ? t.akis_usd : t.akis_tl), satirlar: [] }))
-      .sort((a, b) => a.tarih.localeCompare(b.tarih))
+  const secim = useSecim()
+  const secimVar = secim.varlikId !== null || secim.grup !== null
+
+  const { seri, onceki, oncekiNet, bekleyen, bekleyenNet, secimKodu } = useMemo(() => {
+    // Secim varsa seri secili kalemlerin gun gun toplami (deger ve akis), yoksa portfoy toplami.
+    const uyeler = secimVar ? kalemler.filter((k) => secimdeMi(secim, k)) : kalemler
+    const uyeId = new Set(uyeler.map((k) => k.varlik_id))
+    let seri: Nokta[]
+    if (secimVar) {
+      const gun = new Map<string, Nokta>()
+      for (const k of uyeler) {
+        const n = gun.get(k.tarih) ?? { tarih: k.tarih, deger: 0, net: 0, satirlar: [] }
+        n.deger += num(dolar ? k.deger_usd : k.deger_tl)
+        n.net += num(dolar ? k.akis_usd : k.akis_tl)
+        gun.set(k.tarih, n)
+      }
+      seri = [...gun.values()].sort((a, b) => a.tarih.localeCompare(b.tarih))
+    } else {
+      seri = toplam
+        .filter((t) => (dolar ? t.deger_usd : t.deger_tl) !== null)
+        .map((t) => ({ tarih: t.tarih, deger: num(dolar ? t.deger_usd : t.deger_tl), net: num(dolar ? t.akis_usd : t.akis_tl), satirlar: [] }))
+        .sort((a, b) => a.tarih.localeCompare(b.tarih))
+    }
     const tarihler = seri.map((s) => s.tarih)
-    const yer = hareketYerlestir(hareketler, kalemler, tarihler)
+    const secimKodu = secim.varlikId === null ? null : (uyeler[0]?.kod ?? hareketler.find((h) => h.varlik_id === secim.varlikId)?.varlik?.kod ?? null)
+    const yer = hareketYerlestir(hareketler.filter((h) => uyeId.has(h.varlik_id)), uyeler, tarihler)
     const tutar = (h: HareketKaydi) => cevir(yonluTutar(h), h.usdtry ? Number(h.usdtry) : null)
 
     for (const s of seri) {
@@ -74,7 +94,7 @@ export default function PortfoyBuyuklugu({
         s.satirlar.push({ kod: h.varlik?.kod ?? `#${h.varlik_id}`, etiket: h.tur, tutar: tutar(h) })
       }
       // Hareketsiz akis (nakit bakiyesi gibi): olcum gorunumunun kendi rakami.
-      for (const k of kalemler) {
+      for (const k of uyeler) {
         if (k.tarih !== s.tarih || aciklanan.has(k.varlik_id)) continue
         const a = num(dolar ? k.akis_usd : k.akis_tl)
         if (Math.abs(a) >= 0.5) s.satirlar.push({ kod: k.kod, etiket: 'değişim', tutar: a })
@@ -85,14 +105,15 @@ export default function PortfoyBuyuklugu({
     const kesit = donemKesiti(seri, donem)
     const basTarihi = kesit[0]?.tarih ?? null
     const oncekiHareket = [...yer.onceki, ...[...yer.gunler.entries()].filter(([t]) => basTarihi !== null && t <= basTarihi).flatMap(([, hs]) => hs)]
-    return { seri: kesit, onceki: oncekiHareket.length, oncekiNet: topla(oncekiHareket), bekleyen: yer.bekleyen, bekleyenNet: topla(yer.bekleyen) }
+    return { seri: kesit, onceki: oncekiHareket.length, oncekiNet: topla(oncekiHareket), bekleyen: yer.bekleyen, bekleyenNet: topla(yer.bekleyen), secimKodu }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [toplam, kalemler, hareketler, donem, dolar, usdtry])
+  }, [toplam, kalemler, hareketler, donem, dolar, usdtry, secim.varlikId, secim.grup])
+  const baslikEki = secimAdi(secim, secimKodu)
 
   if (seri.length < 2) {
     return (
       <div className="kart p-4">
-        <h2 className="text-[15px] font-semibold">Portföy büyüklüğü</h2>
+        <h2 className="text-[15px] font-semibold">Portföy büyüklüğü{baslikEki && <span style={{ color: 'var(--ink-2)' }}> · {baslikEki}</span>}</h2>
         <p className="py-6 text-center text-[13px]" style={{ color: 'var(--ink-muted)' }}>
           Grafik için en az iki ölçüm gerekiyor.
         </p>
@@ -116,7 +137,7 @@ export default function PortfoyBuyuklugu({
   return (
     <div className="kart p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 className="text-[15px] font-semibold">Portföy büyüklüğü</h2>
+        <h2 className="text-[15px] font-semibold">Portföy büyüklüğü{baslikEki && <span style={{ color: 'var(--ink-2)' }}> · {baslikEki}</span>}</h2>
         <span className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
           Kasada ne var, ne zaman para koydun ya da çektin. Bir düşüş gördüğünde piyasa mı, çekiş mi — işaretlere bak.
         </span>

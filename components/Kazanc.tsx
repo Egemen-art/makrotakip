@@ -8,6 +8,7 @@ import { tarihKisa, tl, tlKurus, usd, usdKurus } from '@/lib/bicim'
 import { EKSEN_STILI, eksenTL, eksenUSD } from './grafik/ortak'
 import { hareketYerlestir, yonluTutar } from '@/lib/akis'
 import { donemBasligi, donemKesiti, type Donem } from '@/lib/donem'
+import { secimAdi, secimdeMi, useSecim } from './SecimBaglami'
 
 /**
  * KAZANC — "cebime ne girdi, ne cikti". TWR'den (getiri yuzdesi) ayri bir soru:
@@ -53,9 +54,13 @@ export default function Kazanc({
   /** TL tutari ekran parasina cevir; hareketin kendi kuru varsa o, yoksa gunun kuru. */
   const cevir = (tlN: number, kur?: number | null) => (dolar ? tlN / (kur && kur > 0 ? kur : usdtry!) : tlN)
 
+  // Sayfa secimi (pasta): yalniz secili kalem/grup.
+  const secim = useSecim()
+  const secili = useMemo(() => kar.filter((k) => secimdeMi(secim, k)), [kar, secim])
+  const baslikEki = secimAdi(secim, secili[0]?.kod ?? null)
   // Maliyeti bilinenler toplama girer; bilinmeyenler (BES, nakit) ayri.
-  const bilinen = useMemo(() => kar.filter((k) => !k.maliyet_bilinmiyor && k.kaynak_tur !== 'nakit'), [kar])
-  const bilinmeyen = useMemo(() => kar.filter((k) => k.maliyet_bilinmiyor || k.kaynak_tur === 'nakit'), [kar])
+  const bilinen = useMemo(() => secili.filter((k) => !k.maliyet_bilinmiyor && k.kaynak_tur !== 'nakit'), [secili])
+  const bilinmeyen = useMemo(() => secili.filter((k) => k.maliyet_bilinmiyor || k.kaynak_tur === 'nakit'), [secili])
   const bilinenId = useMemo(() => new Set(bilinen.map((k) => k.varlik_id)), [bilinen])
 
   /**
@@ -135,7 +140,7 @@ export default function Kazanc({
   return (
     <div className="kart p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 className="text-[15px] font-semibold">Kazanç</h2>
+        <h2 className="text-[15px] font-semibold">Kazanç{baslikEki && <span style={{ color: 'var(--ink-2)' }}> · {baslikEki}</span>}</h2>
         <span className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
           Ortalama maliyet yöntemi. Getiri yüzdesinden ayrı soru: oradaki &quot;yatırımcı olarak ne kadar iyiydim&quot;, buradaki &quot;cebime ne girdi&quot;.
           {dolar && ' $ görünümde ABD kalemleri kendi dolar maliyetiyle, ₺ kalemler günün kuruyla.'}

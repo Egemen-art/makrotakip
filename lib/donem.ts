@@ -87,7 +87,7 @@ export function donemAdresi(yol: string, d: Partial<Donem> & { kod: DonemKodu },
 /** yuzde: donem basindan beri birikimli getiri. kazanc: ayni donemin PARASAL
  *  karsiligi — para akislarindan arindirilmis (deger farki eksi akis), yani
  *  "bu donemde ne kazandim" sorusunun tutar cevabi. */
-export type ZincirNoktasi = { tarih: string; yuzde: number; deger: number; kazanc: number }
+export type ZincirNoktasi = { tarih: string; yuzde: number; deger: number; kazanc: number; akis?: number }
 
 /**
  * Gunluk zincirin donem kesiti. `getiri` satirin gunluk getirisi (%, onceki
@@ -117,8 +117,9 @@ export function donemZinciri<T extends { tarih: string }>(
     carpan *= 1 + getiri(s) / 100
     const d = deger(s)
     // Parasal kazanc: deger farkindan o gunun akisi dusulur; eklenen para kazanc sayilmaz.
-    kazanc += d - oncekiDeger - (akis ? akis(s) : 0)
-    noktalar.push({ tarih: s.tarih, yuzde: (carpan - 1) * 100, deger: d, kazanc })
+    const f = akis ? akis(s) : 0
+    kazanc += d - oncekiDeger - f
+    noktalar.push({ tarih: s.tarih, yuzde: (carpan - 1) * 100, deger: d, kazanc, akis: f })
     oncekiDeger = d
   }
   return noktalar
@@ -135,6 +136,19 @@ export function donemKesiti<T extends { tarih: string }>(sirali: T[], donem: Don
   const oncekiler = icinde.filter((s) => s.tarih <= donem.bas!)
   const basIdx = oncekiler.length > 0 ? icinde.indexOf(oncekiler[oncekiler.length - 1]) : 0
   return icinde.slice(basIdx)
+}
+
+/**
+ * Donemin PARASAL sonucu ve "koydugun paraya gore" orani. TWR'den farkli soru:
+ * TWR zamanlamadan arindirilmis performans; bu ise cebe gore sonuc. Oran,
+ * kazancin donem basi degeri + donemde eklenen paraya bolumu (cikan para
+ * paydayi kucultmez; satip cektigin para kazancin icinde zaten).
+ */
+export function donemKari(z: ZincirNoktasi[]): { kazanc: number; oran: number | null } | null {
+  if (z.length < 2) return null
+  const kazanc = z[z.length - 1].kazanc
+  const taban = z[0].deger + z.slice(1).reduce((t, n) => t + Math.max(n.akis ?? 0, 0), 0)
+  return { kazanc, oran: taban > 0 ? (kazanc / taban) * 100 : null }
 }
 
 /** Donem getirisi (%); tek nokta varsa null (henuz olculecek gun yok). */

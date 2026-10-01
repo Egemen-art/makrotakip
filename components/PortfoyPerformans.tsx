@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import {
   Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid,
 } from 'recharts'
@@ -10,7 +10,8 @@ import type {
 import { GRUP_ETIKETI, SINIF_ETIKETI, SINIF_GRUBU } from '@/lib/tipler-varlik'
 import { tarihKisa, tl, usd, yuzde } from '@/lib/bicim'
 import { BIRIM_ADI, birimAnlamli, birimFiyat, birimMetni } from '@/lib/birim'
-import { donemBasligi, donemGetirisi, donemZinciri, type Donem } from '@/lib/donem'
+import { donemBasligi, donemGetirisi, donemKari, donemZinciri, type Donem } from '@/lib/donem'
+import { useSecim } from './SecimBaglami'
 import { gunlukZincir, olcumZinciri, type ZincirSatiri } from '@/lib/zincir'
 import { deflatorKur, donemEnflasyonu, reelZincir, SERI_ETIKETI, type EnflasyonSatiri, type EnflasyonSerisi } from '@/lib/enflasyon'
 import { EKSEN_STILI, SERI_RENKLERI } from './grafik/ortak'
@@ -55,8 +56,8 @@ export default function PortfoyPerformansGorunumu({
   abdSeri?: Exclude<EnflasyonSerisi, 'tufe'>
   enflasyon?: EnflasyonSatiri[]
 }) {
-  const [grup, setGrup] = useState<string | null>(null)
-  const [varlikId, setVarlikId] = useState<number | null>(null)
+  // Secim sayfa genelinde ortak (SecimBaglami): buyukluk ve kazanc kartlari da uyar.
+  const { grup, varlikId, grupSec: grupSecOrtak, varlikSec } = useSecim()
   const dolar = para === 'USD' && usdtry !== null && usdtry > 0
   const cevir = (n: number) => (dolar ? n / usdtry! : n)
   const bicim = dolar ? usd : tl
@@ -104,10 +105,13 @@ export default function PortfoyPerformansGorunumu({
 
   // Kalem bazinda DONEM getirisi — listede yanina yazilir; null = donemde olcum yok.
   const donemGetirileri = useMemo(() => {
-    const m = new Map<number, number | null>()
+    const m = new Map<number, { twr: number | null; kar: ReturnType<typeof donemKari> }>()
     const gruplu = new Map<number, VarlikPerformans[]>()
     for (const k of kalemler) gruplu.set(k.varlik_id, [...(gruplu.get(k.varlik_id) ?? []), k])
-    for (const [id, satirlar] of gruplu) m.set(id, donemGetirisi(kesit(gunlukZincir(satirlar, dolar)).zincir))
+    for (const [id, satirlar] of gruplu) {
+      const k = kesit(gunlukZincir(satirlar, dolar))
+      m.set(id, { twr: donemGetirisi(k.zincir), kar: donemKari(k.nominal) })
+    }
     return m
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kalemler, donem, dolar, reelAktif, deflator])
@@ -120,16 +124,18 @@ export default function PortfoyPerformansGorunumu({
       const g = SINIF_GRUBU[k.sinif] ?? 'diger'
       gruplu.set(g, [...(gruplu.get(g) ?? []), k])
     }
-    const m = new Map<string, number | null>()
-    for (const [g, satirlar] of gruplu) m.set(g, donemGetirisi(kesit(gunlukZincir(satirlar, dolar)).zincir))
+    const m = new Map<string, { twr: number | null; kar: ReturnType<typeof donemKari> }>()
+    for (const [g, satirlar] of gruplu) {
+      const k = kesit(gunlukZincir(satirlar, dolar))
+      m.set(g, { twr: donemGetirisi(k.zincir), kar: donemKari(k.nominal) })
+    }
     return m
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kalemler, donem, dolar, reelAktif, deflator])
 
   function grupSec(ad: string | undefined) {
     if (!ad) return
-    setGrup((g) => (g === ad ? null : ad))
-    setVarlikId(null)
+    grupSecOrtak(ad)
   }
 
   // Cizgi: ne secildiyse onun donem kesiti — kalem, grup ya da toplam portfoy.
@@ -190,7 +196,7 @@ export default function PortfoyPerformansGorunumu({
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <h2 className="text-[15px] font-semibold">Dağılım ve performans</h2>
         <span className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
-          Getiri para akışlarından arındırılmış; eklediğin para kazanç, çektiğin kayıp sayılmaz.
+          Kâr: cebine göre sonuç, koyduğun paraya oranı. Zincir: para akışlarından arındırılmış zaman ağırlıklı getiri (eklediğin para kazanç, çektiğin kayıp sayılmaz).
           {dolar && ' Dolar zinciri her günü kendi kuruyla çevirir.'}
           {reelAktif && ` Reel: ${SERI_ETIKETI[enfSeri]} ile deflate edilmiş${deflator!.sonAy ? `, son veri ${deflator!.sonAy}` : ''}.`}
           {reel && !reelAktif && <span style={{ color: 'var(--ciddi)' }}> Reel istendi ama {SERI_ETIKETI[enfSeri]} verisi yok; nominal gösteriliyor.</span>}
@@ -251,18 +257,7 @@ export default function PortfoyPerformansGorunumu({
                     <span className="rakam w-12 shrink-0 text-right text-[12px]" style={{ color: 'var(--ink-muted)' }}>
                       {yuzde(g.deger / toplamDeger)}
                     </span>
-                    {(() => {
-                      const gr = grupGetirileri.get(g.ad) ?? null
-                      return (
-                        <span
-                          className="rakam w-20 shrink-0 text-right text-[11px]"
-                          title={`Grubun getirisi, ${donemAdi} (para akışlarından arındırılmış)`}
-                          style={{ color: gr === null ? 'var(--ink-muted)' : gr > 0 ? 'var(--artis-iyi)' : gr < 0 ? 'var(--kritik)' : 'var(--ink-muted)' }}
-                        >
-                          {gr === null ? 'ölçüm yok' : yuzdeMetni(String(gr))}
-                        </span>
-                      )
-                    })()}
+                    <GetiriHucresi g={grupGetirileri.get(g.ad)} donemAdi={donemAdi} bicim={bicim} />
                   </button>
 
                   {/* Dilim secildi: grubun kalemleri, her birinin kendi getirisiyle */}
@@ -280,7 +275,7 @@ export default function PortfoyPerformansGorunumu({
                         return (
                           <li key={u.varlik_id}>
                             <button
-                              type="button" onClick={() => setVarlikId((v) => (v === u.varlik_id ? null : u.varlik_id))}
+                              type="button" onClick={() => varlikSec(u.varlik_id)}
                               aria-pressed={secili}
                               className="flex w-full items-baseline gap-2 rounded-md px-1.5 py-1 text-left text-[12px] hover:bg-[var(--plane)]"
                               style={{ background: secili ? 'var(--plane)' : undefined }}
@@ -302,13 +297,7 @@ export default function PortfoyPerformansGorunumu({
                               <span className="rakam w-12 shrink-0 text-right text-[11px]" style={{ color: 'var(--ink-muted)' }}>
                                 {toplamDeger > 0 ? yuzde(uDeger / toplamDeger) : '—'}
                               </span>
-                              <span
-                                className="rakam w-20 shrink-0 text-right text-[11px]"
-                                title={`Getiri, ${donemAdi} (para akışlarından arındırılmış)`}
-                                style={{ color: k === null ? 'var(--ink-muted)' : k > 0 ? 'var(--artis-iyi)' : k < 0 ? 'var(--kritik)' : 'var(--ink-muted)' }}
-                              >
-                                {k === null ? 'ölçüm yok' : `getiri ${yuzdeMetni(String(k))}`}
-                              </span>
+                              <GetiriHucresi g={k ?? undefined} donemAdi={donemAdi} bicim={bicim} />
                             </button>
                           </li>
                         )
@@ -438,5 +427,43 @@ export default function PortfoyPerformansGorunumu({
         )}
       </div>
     </div>
+  )
+}
+
+/**
+ * Liste hucresi: KAR (cebe gore, koydugun paraya oran) one; ZINCIR (TWR)
+ * altinda soluk. Ikisi ayni sey degil: ASELS'te zincir +42% iken kar −2%
+ * olabilir — kucuk parayla kazanip buyuk parayla hafif kaybetmek.
+ */
+function GetiriHucresi({
+  g, donemAdi, bicim,
+}: {
+  g: { twr: number | null; kar: ReturnType<typeof donemKari> } | undefined
+  donemAdi: string
+  bicim: (n: number) => string
+}) {
+  if (!g || (g.twr === null && !g.kar)) {
+    return <span className="rakam w-24 shrink-0 text-right text-[11px]" style={{ color: 'var(--ink-muted)' }}>ölçüm yok</span>
+  }
+  const kar = g.kar
+  const renk = (n: number) => (n > 0 ? 'var(--artis-iyi)' : n < 0 ? 'var(--kritik)' : 'var(--ink-muted)')
+  // Hic hareket etmemis kalem (BES, nakit): sifir yazmak yerine bos.
+  const hareketsiz = (!kar || Math.abs(kar.kazanc) < 0.5) && (g.twr === null || Math.abs(g.twr) < 0.005)
+  if (hareketsiz) {
+    return <span className="rakam w-36 shrink-0 text-right text-[11px]" style={{ color: 'var(--ink-muted)' }}>—</span>
+  }
+  return (
+    <span className="flex w-36 shrink-0 flex-col items-end whitespace-nowrap text-right leading-tight">
+      {kar && (
+        <span className="rakam text-[12px]" style={{ color: renk(kar.kazanc) }} title={`Kâr, ${donemAdi}: ${tutarMetni(kar.kazanc, bicim)} · koyduğun paraya göre`}>
+          {tutarMetni(kar.kazanc, bicim)}{kar.oran !== null && <span className="ml-1 text-[11px]">· {yuzdeMetni(String(kar.oran))}</span>}
+        </span>
+      )}
+      {g.twr !== null && (
+        <span className="rakam text-[10px]" style={{ color: 'var(--ink-muted)' }} title={`Zincir (zaman ağırlıklı getiri), ${donemAdi}`}>
+          zincir {yuzdeMetni(String(g.twr))}
+        </span>
+      )}
+    </span>
   )
 }
