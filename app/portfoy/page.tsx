@@ -126,7 +126,7 @@ export default async function PortfoySayfasi({
               toplam={(toplam.data ?? []) as PortfoyPerformans[]}
               kalemler={(kalemler.data ?? []) as VarlikPerformans[]}
               hareketler={(hareketler.data ?? []) as HareketKaydi[]}
-              para={para} usdtry={usdtry}
+              donem={donem} para={para} usdtry={usdtry}
             />
           </div>
           <div className="mt-4">
@@ -134,7 +134,7 @@ export default async function PortfoySayfasi({
               kar={(kar.data ?? []) as VarlikKar[]}
               hareketler={(hareketler.data ?? []) as HareketKaydi[]}
               kalemler={(kalemler.data ?? []) as VarlikPerformans[]}
-              para={para} usdtry={usdtry}
+              donem={donem} para={para} usdtry={usdtry}
             />
           </div>
           <div className="mt-4">

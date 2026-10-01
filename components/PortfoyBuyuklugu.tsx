@@ -6,6 +6,7 @@ import {
 } from 'recharts'
 import type { HareketKaydi, Para, PortfoyPerformans, VarlikPerformans } from '@/lib/tipler-varlik'
 import { hareketYerlestir, yonluTutar } from '@/lib/akis'
+import { donemBasligi, donemKesiti, type Donem } from '@/lib/donem'
 import { tarihKisa, tl, tlKurus, usd, usdKurus } from '@/lib/bicim'
 import { EKSEN_STILI, eksenTL, eksenUSD, ustSinir } from './grafik/ortak'
 
@@ -35,12 +36,19 @@ const num = (v: string | number | null | undefined) => (v === null || v === unde
 const isaretli = (n: number, bicim: (x: number) => string) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${bicim(Math.abs(n))}`
 const renk = (n: number) => (n > 0 ? 'var(--artis-iyi)' : n < 0 ? 'var(--kritik)' : 'var(--ink-muted)')
 
+/** Eksen etiketi: seri tek yila sigiyorsa yil yazilmaz, iki yila yayiliyorsa yazilir. */
+const eksenTarihiYap = (ilk: string | undefined, son: string | undefined) => {
+  const ayniYil = !!ilk && !!son && ilk.slice(0, 4) === son.slice(0, 4)
+  return (t: unknown) => (ayniYil ? tarihKisa(String(t)).replace(/ \d{4}$/, '') : tarihKisa(String(t)))
+}
+
 export default function PortfoyBuyuklugu({
-  toplam, kalemler, hareketler, para = 'TRY', usdtry = null,
+  toplam, kalemler, hareketler, donem, para = 'TRY', usdtry = null,
 }: {
   toplam: PortfoyPerformans[]
   kalemler: VarlikPerformans[]
   hareketler: HareketKaydi[]
+  donem: Donem
   para?: Para
   usdtry?: number | null
 }) {
@@ -73,9 +81,13 @@ export default function PortfoyBuyuklugu({
       }
     }
     const topla = (hs: HareketKaydi[]) => hs.reduce((t, h) => t + tutar(h), 0)
-    return { seri, onceki: yer.onceki.length, oncekiNet: topla(yer.onceki), bekleyen: yer.bekleyen, bekleyenNet: topla(yer.bekleyen) }
+    // Donem kesiti: ilk nokta donem basi. Ondan onceki (ve o gune dusen) hareketler baslangic degerinin icinde.
+    const kesit = donemKesiti(seri, donem)
+    const basTarihi = kesit[0]?.tarih ?? null
+    const oncekiHareket = [...yer.onceki, ...[...yer.gunler.entries()].filter(([t]) => basTarihi !== null && t <= basTarihi).flatMap(([, hs]) => hs)]
+    return { seri: kesit, onceki: oncekiHareket.length, oncekiNet: topla(oncekiHareket), bekleyen: yer.bekleyen, bekleyenNet: topla(yer.bekleyen) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [toplam, kalemler, hareketler, dolar, usdtry])
+  }, [toplam, kalemler, hareketler, donem, dolar, usdtry])
 
   if (seri.length < 2) {
     return (
@@ -90,12 +102,16 @@ export default function PortfoyBuyuklugu({
 
   const ilk = seri[0], son = seri[seri.length - 1]
   const degisim = son.deger - ilk.deger
-  const netAkis = seri.reduce((t, s) => t + s.net, 0)
+  // Ilk nokta donem basidir: o gunun akisi baslangic degerinin icinde sayilir, isaretlenmez.
+  const sonrasi = seri.slice(1)
+  const netAkis = sonrasi.reduce((t, s) => t + s.net, 0)
   const piyasa = degisim - netAkis
-  const girisGun = seri.filter((s) => s.net >= 0.5).length
-  const cikisGun = seri.filter((s) => s.net <= -0.5).length
+  const girisGun = sonrasi.filter((s) => s.net >= 0.5).length
+  const cikisGun = sonrasi.filter((s) => s.net <= -0.5).length
+  const donemAdi = donemBasligi(donem)
   const tavan = ustSinir(Math.max(...seri.map((s) => s.deger)))
   const ekseni = dolar ? eksenUSD : eksenTL
+  const eksenTarihi = eksenTarihiYap(ilk.tarih, son.tarih)
 
   return (
     <div className="kart p-4">
@@ -113,13 +129,13 @@ export default function PortfoyBuyuklugu({
           <div className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>{tarihKisa(son.tarih)}</div>
         </div>
         <div>
-          <div className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>Başlangıç</div>
+          <div className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>{donem.kod === 'tum' ? 'Başlangıç' : 'Dönem başı'}</div>
           <div className="rakam text-[18px] font-semibold leading-tight">{bicim(ilk.deger)}</div>
           <div className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>{tarihKisa(ilk.tarih)}</div>
         </div>
         <div>
           <div className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>Net akış</div>
-          <div className="rakam text-[18px] font-semibold leading-tight" title="Ölçümler arasında koyduğun − çektiğin">{isaretli(netAkis, bicim)}</div>
+          <div className="rakam text-[18px] font-semibold leading-tight" title={`Dönemde (${donemAdi}) koyduğun − çektiğin`}>{isaretli(netAkis, bicim)}</div>
           <div className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>{girisGun} giriş günü · {cikisGun} çıkış günü</div>
         </div>
         <div>
@@ -143,11 +159,10 @@ export default function PortfoyBuyuklugu({
             <span style={{ color: 'var(--ink-2)' }}>{s.ad}</span>
           </span>
         ))}
-        {onceki > 0 && (
-          <span className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
-            İlk ölçümden önceki {onceki} hareket ({isaretli(oncekiNet, bicim)}) başlangıç değerinin içinde.
-          </span>
-        )}
+        <span className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+          {donemAdi} · {tarihKisa(ilk.tarih)} → {tarihKisa(son.tarih)}
+          {onceki > 0 && ` · öncesindeki ${onceki} hareket (${isaretli(oncekiNet, bicim)}) başlangıç değerinin içinde`}
+        </span>
       </div>
       {bekleyen.length > 0 && (
         <p className="mt-1 text-[11px]" style={{ color: 'var(--uyari)' }}>
@@ -167,7 +182,7 @@ export default function PortfoyBuyuklugu({
             </defs>
             <CartesianGrid stroke="var(--grid)" vertical={false} />
             <XAxis
-              dataKey="tarih" tickFormatter={(t) => tarihKisa(String(t)).replace(/ \d{4}$/, '')}
+              dataKey="tarih" tickFormatter={eksenTarihi}
               tick={EKSEN_STILI} tickLine={false} axisLine={{ stroke: 'var(--axis)' }} minTickGap={24}
             />
             <YAxis tickFormatter={ekseni} tick={EKSEN_STILI} tickLine={false} axisLine={false} width={64} domain={[0, tavan]} />
@@ -179,7 +194,7 @@ export default function PortfoyBuyuklugu({
               isAnimationActive={false}
             />
             {/* Akis gunleri: isaret cizginin ustunde; renk yon, yaricap 5 = 10px, surface halkasi 2px. */}
-            {seri.filter((s) => Math.abs(s.net) >= 0.5).map((s) => (
+            {sonrasi.filter((s) => Math.abs(s.net) >= 0.5).map((s) => (
               <ReferenceDot
                 key={s.tarih} x={s.tarih} y={s.deger} r={5}
                 fill={s.net >= 0 ? GIRIS : CIKIS} stroke="var(--surface)" strokeWidth={2}

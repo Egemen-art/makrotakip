@@ -124,6 +124,19 @@ export function donemZinciri<T extends { tarih: string }>(
   return noktalar
 }
 
+/**
+ * Sirali bir gunluk serinin donem kesiti: donem basindaki (ya da oncesindeki)
+ * son nokta baslangictir, bitise kadar devam eder. donemZinciri ile ayni
+ * baslangic kurali; getiri hesabi olmayan seriler (deger, akis) icin.
+ */
+export function donemKesiti<T extends { tarih: string }>(sirali: T[], donem: Donem): T[] {
+  const icinde = sirali.filter((s) => s.tarih <= donem.bit)
+  if (icinde.length === 0 || donem.bas === null) return icinde
+  const oncekiler = icinde.filter((s) => s.tarih <= donem.bas!)
+  const basIdx = oncekiler.length > 0 ? icinde.indexOf(oncekiler[oncekiler.length - 1]) : 0
+  return icinde.slice(basIdx)
+}
+
 /** Donem getirisi (%); tek nokta varsa null (henuz olculecek gun yok). */
 export function donemGetirisi(z: ZincirNoktasi[]): number | null {
   return z.length >= 2 ? z[z.length - 1].yuzde : null

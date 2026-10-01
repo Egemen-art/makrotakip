@@ -7,6 +7,7 @@ import { SINIF_ETIKETI } from '@/lib/tipler-varlik'
 import { tarihKisa, tl, tlKurus, usd, usdKurus } from '@/lib/bicim'
 import { EKSEN_STILI, eksenTL, eksenUSD } from './grafik/ortak'
 import { hareketYerlestir, yonluTutar } from '@/lib/akis'
+import { donemBasligi, donemKesiti, type Donem } from '@/lib/donem'
 
 /**
  * KAZANC — "cebime ne girdi, ne cikti". TWR'den (getiri yuzdesi) ayri bir soru:
@@ -30,12 +31,19 @@ const yuzdeMetni = (n: number) => `${n > 0 ? '+' : ''}${sayi2(n)} %`
 const renk = (n: number) => (n > 0 ? 'var(--artis-iyi)' : n < 0 ? 'var(--kritik)' : 'var(--ink-muted)')
 const num = (v: string | number | null | undefined) => (v === null || v === undefined ? 0 : Number(v))
 
+/** Eksen etiketi: seri tek yila sigiyorsa yil yazilmaz, iki yila yayiliyorsa yazilir. */
+const eksenTarihiYap = (ilk: string | undefined, son: string | undefined) => {
+  const ayniYil = !!ilk && !!son && ilk.slice(0, 4) === son.slice(0, 4)
+  return (t: unknown) => (ayniYil ? tarihKisa(String(t)).replace(/ \d{4}$/, '') : tarihKisa(String(t)))
+}
+
 export default function Kazanc({
-  kar, hareketler, kalemler, para = 'TRY', usdtry = null,
+  kar, hareketler, kalemler, donem, para = 'TRY', usdtry = null,
 }: {
   kar: VarlikKar[]
   hareketler: HareketKaydi[]
   kalemler: VarlikPerformans[]
+  donem: Donem
   para?: Para
   usdtry?: number | null
 }) {
@@ -88,11 +96,12 @@ export default function Kazanc({
   /**
    * Cizgi: olcum tarihlerinde bilinen kalemlerin toplam degeri ile o ana kadarki
    * net yatirilan. Akis, olcum gorunumunun kendi rakami (akis_tl/usd): hareket
-   * hangi olcume dustuyse orada sayilir, degerle ayni anda. Son noktadan geriye
-   * dogru kurulur: bugunku net yatirilan (v_varlik_kar) eksi henuz olcume
-   * girmemis hareketler = son olcumdeki net yatirilan.
+   * hangi olcume dustuyse orada sayilir, degerle ayni anda; kalemin ilk gunu
+   * maliyetinin tamamidir. Net yatirilan bastan ileriye toplanir — $ gorunumde
+   * her akis kendi gununun kuruyla, boylece gecmis kur farki cizgiyi egmez.
+   * Son olcumden sonra girilen hareketler (bekleyen) cizgide yoktur.
    */
-  const { cizgi, oncekiAkis, bekleyen } = useMemo(() => {
+  const { cizgi, oncekiAkis, bekleyen, donemKar } = useMemo(() => {
     const degerler = new Map<string, number>()
     const akislar = new Map<string, number>()
     for (const r of kalemler) {
@@ -106,18 +115,22 @@ export default function Kazanc({
     const bekleyenNet = yer.bekleyen.reduce((t, h) => t + tutar(h), 0)
 
     const satirlar: { tarih: string; deger: number; yatirilan: number; kar: number }[] = []
-    let yat = toplamlar.yatirilan - bekleyenNet
-    for (let i = tarihler.length - 1; i >= 0; i--) {
-      const t = tarihler[i]
+    let yat = 0
+    for (const t of tarihler) {
+      yat += akislar.get(t) ?? 0
       const deger = degerler.get(t)!
-      satirlar.unshift({ tarih: t, deger, yatirilan: yat, kar: deger - yat })
-      yat -= akislar.get(t) ?? 0
+      satirlar.push({ tarih: t, deger, yatirilan: yat, kar: deger - yat })
     }
-    return { cizgi: satirlar, oncekiAkis: yer.onceki.length, bekleyen: { adet: yer.bekleyen.length, net: bekleyenNet } }
+    const kesit = donemKesiti(satirlar, donem)
+    // Donemin parasal sonucu: degerin degisimi eksi net yatirilanin degisimi.
+    const bas = kesit[0], son = kesit[kesit.length - 1]
+    const donemKar = kesit.length >= 2 ? (son.deger - bas.deger) - (son.yatirilan - bas.yatirilan) : null
+    return { cizgi: kesit, oncekiAkis: yer.onceki.length, bekleyen: { adet: yer.bekleyen.length, net: bekleyenNet }, donemKar }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kalemler, hareketler, bilinenId, dolar, usdtry, toplamlar.yatirilan])
+  }, [kalemler, hareketler, bilinenId, dolar, usdtry, donem])
 
   const ekseni = dolar ? eksenUSD : eksenTL
+  const eksenTarihi = eksenTarihiYap(cizgi[0]?.tarih, cizgi[cizgi.length - 1]?.tarih)
 
   return (
     <div className="kart p-4">
@@ -166,8 +179,9 @@ export default function Kazanc({
               </span>
             ))}
             <span className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
-              Aradaki boşluk kâr. {tarihKisa(cizgi[0].tarih)} → {tarihKisa(cizgi[cizgi.length - 1].tarih)}
-              {oncekiAkis > 0 && ` · ölçümden önceki ${oncekiAkis} hareket başlangıç noktasının içinde`}
+              Aradaki boşluk kâr. {donemBasligi(donem)} · {tarihKisa(cizgi[0].tarih)} → {tarihKisa(cizgi[cizgi.length - 1].tarih)}
+              {donemKar !== null && <> · bu dönemde <span className="rakam font-medium" style={{ color: renk(donemKar) }}>{isaretli(donemKar, bicim)}</span></>}
+              {donem.kod === 'tum' && oncekiAkis > 0 && ` · ölçümden önceki ${oncekiAkis} hareket başlangıç noktasının içinde`}
               {bekleyen.adet > 0 && ` · son ölçümden sonraki ${bekleyen.adet} hareket (${isaretli(bekleyen.net, bicim)}) henüz çizgide değil`}
             </span>
           </div>
@@ -175,7 +189,7 @@ export default function Kazanc({
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={cizgi} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                 <CartesianGrid stroke="var(--grid)" vertical={false} />
-                <XAxis dataKey="tarih" tickFormatter={(t) => tarihKisa(t).replace(/ \d{4}$/, '')} tick={EKSEN_STILI} tickLine={false} axisLine={{ stroke: 'var(--axis)' }} minTickGap={24} />
+                <XAxis dataKey="tarih" tickFormatter={eksenTarihi} tick={EKSEN_STILI} tickLine={false} axisLine={{ stroke: 'var(--axis)' }} minTickGap={24} />
                 <YAxis tickFormatter={ekseni} tick={EKSEN_STILI} tickLine={false} axisLine={false} width={64} domain={['auto', 'auto']} />
                 <Tooltip
                   cursor={{ stroke: 'var(--axis)' }}
