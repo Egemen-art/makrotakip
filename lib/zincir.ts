@@ -19,9 +19,17 @@ export type ZincirSatiri = { tarih: string; r: number; deger: number; akis: numb
 
 const sayi = (v: string | null | undefined) => Number(v ?? 0)
 
+/**
+ * Adim getirisi. PAYDA = V0 + max(F, 0) — veritabanindaki zincirle birebir ayni.
+ * Para GIRDIYSE (alim) payda V0 + F: para donem basinda girdi, tum donem calisti.
+ * Para CIKTIYSA (satim) payda V0: cikan pozisyon ciktigi ana kadar calisti.
+ * Eski payda V0 + F idi; pozisyon tamamen satilinca V1 = 0, F = -hasilat olur ve
+ * pay ile payda birbirinin tam negatifi cikardi — oran SATIS FIYATINDAN BAGIMSIZ
+ * her zaman tam -100%. (Egemen 01.10.2026; ASELS/BIMAS -99,99 yaziyordu.)
+ */
 function adim(deger: number, onceki: number | null, akis: number) {
   if (onceki === null) return 0
-  const taban = onceki + akis
+  const taban = onceki + Math.max(akis, 0)
   return taban === 0 ? 0 : ((deger - onceki - akis) / taban) * 100
 }
 
