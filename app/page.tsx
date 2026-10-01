@@ -11,6 +11,7 @@ import TaksitAkisi from '@/components/TaksitAkisi'
 import TakvimListesi from '@/components/TakvimListesi'
 import TrendGrafigi from '@/components/grafik/TrendGrafigi'
 import KategoriGrafigi from '@/components/grafik/KategoriGrafigi'
+import { AyOdagiSaglayici } from '@/components/grafik/AyOdagi'
 import { bugun, donemEtiket, tarihKisa, tl, tlKurus } from '@/lib/bicim'
 
 export const dynamic = 'force-dynamic'
@@ -184,6 +185,7 @@ export default async function Pano({
         />
       </div>
 
+      <AyOdagiSaglayici>
       <Bolum
         baslik="Aylık gider, gelir ve aktarım"
         aciklama="Arşiv ve canlı defter birlikte. Aktarım toplamlara girmez ama görünür kalır."
@@ -197,6 +199,7 @@ export default async function Pano({
       >
         <KategoriGrafigi seriler={d.seriler} seciliAy={seciliAy} altKategoriler={d.altKategoriler} />
       </Bolum>
+      </AyOdagiSaglayici>
 
       {sapmalar.length > 0 && (
         <Bolum

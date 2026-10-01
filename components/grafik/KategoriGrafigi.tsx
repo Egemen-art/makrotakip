@@ -6,6 +6,7 @@ import {
 } from 'recharts'
 import type { AylikKategori, KategoriSerisi, Yon } from '@/lib/tipler'
 import PastaGorunumu from './KategoriPasta'
+import { useAyOdagi } from './AyOdagi'
 import { donemEtiket, tl, trSirala } from '@/lib/bicim'
 import {
   EKSEN_STILI, Ipucu, SERI_RENKLERI, SecimGrubu, eksenTL, ustSinir, yuvaAta, type YuvaKaydi,
@@ -37,6 +38,16 @@ export default function KategoriGrafigi({
     garanti: (adlar) => setYuvalar((onceki) => yuvaAta(onceki, adlar)),
   }
   function yonDegistir(y: Yon) { setYon(y); setYuvalar({}) }
+  // Ustteki aylik grafikten gelen ay: uzerine gelinen > sabitlenen > panonun secili ayi.
+  const { odak, sabit, birak } = useAyOdagi()
+  const pastaAyi = odak ?? sabit ?? seciliAy
+  // Aya tiklayip sabitlemek pastayi gormek istemektir: gorunum Cubuk'taysa Pasta'ya gecer.
+  // (Effect degil, render sirasinda onceki degerle kiyas — React'in onerdigi yol.)
+  const [oncekiSabit, setOncekiSabit] = useState(sabit)
+  if (sabit !== oncekiSabit) {
+    setOncekiSabit(sabit)
+    if (sabit) setGorunum('pasta')
+  }
 
   return (
     <div>
@@ -58,7 +69,24 @@ export default function KategoriGrafigi({
       {/* key={yon}: yon degisince secim sifirdan kurulur. */}
       {gorunum === 'cubuk'
         ? <CubukGorunumu key={yon} seriler={seriler} yon={yon} kayit={kayit} />
-        : <PastaGorunumu key={yon} kayitlar={seriler.ay} yon={yon} seciliAy={seciliAy} kayit={kayit} altKategoriler={altKategoriler} />}
+        : (
+          <>
+            {pastaAyi !== seciliAy && (
+              <p className="mb-2 flex flex-wrap items-center gap-2 text-[12px]" style={{ color: 'var(--ink-2)' }}>
+                <span>
+                  Pasta <span className="font-semibold">{donemEtiket(pastaAyi)}</span> ile biten pencereyi gösteriyor
+                  {odak ? ' (üstteki grafikte üzerine gelinen ay)' : ' (üstteki grafikte sabitlenen ay)'}.
+                </span>
+                {!odak && sabit && (
+                  <button type="button" onClick={birak} className="rounded px-1.5 py-0.5 text-[11px] font-medium" style={{ border: '1px solid var(--hair)', color: 'var(--ink-2)' }}>
+                    {donemEtiket(seciliAy)}&apos;a dön
+                  </button>
+                )}
+              </p>
+            )}
+            <PastaGorunumu key={yon} kayitlar={seriler.ay} yon={yon} seciliAy={pastaAyi} kayit={kayit} altKategoriler={altKategoriler} />
+          </>
+        )}
     </div>
   )
 }

@@ -27,8 +27,9 @@ export async function panoVerisi(seciliAy: string) {
     varlikDegerleri, varlikGetirileri, sonKur, taksitPlanlari, taksitYazilanlar, enflasyon, portfoyZinciri, abdFaiz, trFaiz, takvim,
   ] = await Promise.all([
     sb.from('v_aylik_ozet').select('*').order('ay'),
-    sb.rpc('kategori_serisi', { p_bucket: 'hafta' }),
-    sb.rpc('kategori_serisi', { p_bucket: 'ay' }),
+    // Hafta serisi 860 satir (01.10.2026), her hafta buyur: 1000 tavanina karsi sayfali.
+    hepsiniGetir((bas, bit) => sb.rpc('kategori_serisi', { p_bucket: 'hafta' }).order('donem').order('yon').order('kategori').range(bas, bit)),
+    hepsiniGetir((bas, bit) => sb.rpc('kategori_serisi', { p_bucket: 'ay' }).order('donem').order('yon').order('kategori').range(bas, bit)),
     sb.rpc('kategori_serisi', { p_bucket: 'yil' }),
     sb.from('v_portfoy_getiri').select('*').order('tarih', { ascending: false }).limit(1),
     sb.from('kartlar').select('*').order('kod'),
