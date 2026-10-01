@@ -1,4 +1,5 @@
 import { supabaseSunucu } from '@/lib/supabase/server'
+import { hepsiniGetir } from '@/lib/supabase/hepsi'
 import type {
   AylikKategori, AylikOzet, Islem, Kart, KategoriBant, KategoriSerisi, Nakit, PortfoyGetiri, TaksitPlani, Taksonomi, Kural,
 } from '@/lib/tipler'
@@ -39,7 +40,8 @@ export async function panoVerisi(seciliAy: string) {
     // Ay x yon x kategori x alt: her ay ~40 satir buyuyor. 21.09.2026'da 897 satirdi;
     // limit yazilmazsa PostgREST'in 1000 varsayilaniyla EN ESKI 1000 satir gelir ve
     // pano kirilimi sessizce en yeni aylari dusurur (bkz. 18.09 faiz kutusu hatasi).
-    sb.from('v_aylik_kategori').select('ay,yon,kategori,alt,toplam,adet').limit(50000),
+    // 905 satir (01.10.2026), ay basina buyur: tavan 1000 .limit ile asilmaz, sayfalanir.
+    hepsiniGetir((bas, bit) => sb.from('v_aylik_kategori').select('ay,yon,kategori,alt,toplam,adet').order('ay').order('yon').order('kategori').order('alt').range(bas, bit)),
     // Anlik nakit (karar 49). Aya bagli degil: hangi ay secili olursa olsun BUGUNKU nakit.
     sb.from('v_nakit').select('*').limit(1),
     // Adet bazli guncel portfoy; anlik goruntu tablosunun yerini almaz.
@@ -54,12 +56,13 @@ export async function panoVerisi(seciliAy: string) {
     sb.from('islemler').select('id, taksit_plan_id, taksit_no, tarih, tutar').not('taksit_plan_id', 'is', null).limit(5000),
     // Enflasyon (karar 53): kur seridi kutulari ve baslangictan beri reel.
     sb.from('v_enflasyon').select('*').order('ay').limit(5000),
-    sb.from('v_portfoy_performans').select('*').order('tarih').limit(5000),
+    hepsiniGetir((bas, bit) => sb.from('v_portfoy_performans').select('*').order('tarih').range(bas, bit)),
     // ABD faizleri (FRED): 10Y, 2Y, Fed araligi — kur seridi kutulari ve donem farki.
     // Son 210 gun yeter (en uzun donem filtresi 6 ay) ve PostgREST'in 1000 satir
     // varsayilanina takilmaz: tablo ~400 gun x 5 seri tutuyor, limitsiz cekilirse
     // en ESKI 1000 satir gelir ve kutular aylar oncesini gosterir (18.09 hatasi).
-    sb.from('abd_faiz').select('seri, tarih, deger').gte('tarih', gunEkle(bugun(), -210)).order('tarih').limit(5000),
+    // 919 satir / 210 gun (01.10.2026): seri sayisi x gun; tavana dayanmis, sayfalanir.
+    hepsiniGetir((bas, bit) => sb.from('abd_faiz').select('seri, tarih, deger').gte('tarih', gunEkle(bugun(), -210)).order('tarih').order('seri').range(bas, bit)),
     // Turkiye faizleri: TCMB politika (degisiklik tarihleri), TR 10Y / 2Y gosterge tahvil.
     sb.from('tr_faiz').select('seri, tarih, deger').order('tarih').limit(5000),
     // Yaklasan onemli tarihler (14 gun).

@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { supabaseSunucu } from '@/lib/supabase/server'
+import { hepsiniGetir } from '@/lib/supabase/hepsi'
 import type {
   HareketKaydi, Para, PortfoyBugun, PortfoyOlcumPerformans, PortfoyPerformans, PortfoySinif,
   VarlikDeger, VarlikKar, VarlikOlcumPerformans, VarlikPerformans,
@@ -39,9 +40,10 @@ export default async function PortfoySayfasi({
     sb.from('v_portfoy_bugun').select('*').limit(1),
     sb.from('v_portfoy_sinif').select('*'),
     sb.from('v_varlik_deger').select('*'),
-    sb.from('v_portfoy_performans').select('*').order('tarih').limit(5000),
-    // Kalem x gun: 11 kalem x 1 yil ~ 4000 satir; PostgREST varsayilani 1000, acikca yukseltilir.
-    sb.from('v_varlik_performans').select('*').order('tarih').limit(20000),
+    // Gun basina buyuyen seriler: PostgREST tavani (1000) .limit ile asilmaz, sayfalanir (lib/supabase/hepsi).
+    hepsiniGetir((bas, bit) => sb.from('v_portfoy_performans').select('*').order('tarih').range(bas, bit)),
+    // Kalem x gun: 02.09.2025'ten beri ~1.900 satir ve her gun kalem sayisi kadar artar.
+    hepsiniGetir((bas, bit) => sb.from('v_varlik_performans').select('*').order('tarih').order('varlik_id').range(bas, bit)),
     // Bugunku degerleri dolara cevirmek icin gunun kuru (gecmis kendi kuruyla cevrilir).
     sb.from('kur_gunluk').select('tarih, usdtry').order('tarih', { ascending: false }).limit(1).maybeSingle(),
     // Gun gorunumu: secili gunun olcumleri (olcumden olcume zincir).
