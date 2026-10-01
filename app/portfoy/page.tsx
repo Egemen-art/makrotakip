@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { supabaseSunucu } from '@/lib/supabase/server'
 import type {
   HareketKaydi, Para, PortfoyBugun, PortfoyOlcumPerformans, PortfoyPerformans, PortfoySinif,
-  VarlikDeger, VarlikOlcumPerformans, VarlikPerformans,
+  VarlikDeger, VarlikKar, VarlikOlcumPerformans, VarlikPerformans,
 } from '@/lib/tipler-varlik'
 import { bugun } from '@/lib/bicim'
 import { donemCoz } from '@/lib/donem'
@@ -13,6 +13,8 @@ import ParaAkislari from '@/components/ParaAkislari'
 import ParaSecici from '@/components/ParaSecici'
 import ReelSecici from '@/components/ReelSecici'
 import PortfoyPerformansGorunumu from '@/components/PortfoyPerformans'
+import PortfoyBuyuklugu from '@/components/PortfoyBuyuklugu'
+import Kazanc from '@/components/Kazanc'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,7 +34,7 @@ export default async function PortfoySayfasi({
   // Anlik goruntu tablosu (finans.portfoy) artik OKUNMUYOR: performans
   // bugunden itibaren gunluk olcumden (portfoy_gunluk) zincirlenir. Veri
   // silinmedi, yalnizca ekran degisti.
-  const [bugunku, siniflar, degerler, toplam, kalemler, kur, gunToplam, gunKalemler, hareketler, enflasyon] = await Promise.all([
+  const [bugunku, siniflar, degerler, toplam, kalemler, kur, gunToplam, gunKalemler, hareketler, enflasyon, kar] = await Promise.all([
     sb.from('v_portfoy_bugun').select('*').limit(1),
     sb.from('v_portfoy_sinif').select('*'),
     sb.from('v_varlik_deger').select('*'),
@@ -52,8 +54,10 @@ export default async function PortfoySayfasi({
     sb.from('varlik_hareket').select('*, varlik(kod, sinif)').order('tarih', { ascending: false }).order('id', { ascending: false }).limit(2000),
     // Aylik fiyat endeksleri (tufe / cpi / pce) — reel getiri icin.
     sb.from('v_enflasyon').select('*').order('ay').limit(5000),
+    // Kar/zarar: ortalama maliyet, gerceklesen + gerceklesmemis (kalem basina).
+    sb.from('v_varlik_kar').select('*').limit(500),
   ])
-  const error = [bugunku.error, siniflar.error, degerler.error, toplam.error, kalemler.error, gunToplam.error, gunKalemler.error, hareketler.error, enflasyon.error].find(Boolean)
+  const error = [bugunku.error, siniflar.error, degerler.error, toplam.error, kalemler.error, gunToplam.error, gunKalemler.error, hareketler.error, enflasyon.error, kar.error].find(Boolean)
   const enflasyonSatirlari = (enflasyon.data ?? []) as EnflasyonSatiri[]
   const usdtryDolar = kur.data?.usdtry ? Number(kur.data.usdtry) : null
   const reelOzet = baslangictanReel((toplam.data ?? []) as PortfoyPerformans[], enflasyonSatirlari, para === 'USD' && usdtryDolar !== null && usdtryDolar > 0, abdSeri)
@@ -115,6 +119,22 @@ export default async function PortfoySayfasi({
               reel={reel}
               abdSeri={abdSeri}
               enflasyon={enflasyonSatirlari}
+            />
+          </div>
+          <div className="mt-4">
+            <PortfoyBuyuklugu
+              toplam={(toplam.data ?? []) as PortfoyPerformans[]}
+              kalemler={(kalemler.data ?? []) as VarlikPerformans[]}
+              hareketler={(hareketler.data ?? []) as HareketKaydi[]}
+              para={para} usdtry={usdtry}
+            />
+          </div>
+          <div className="mt-4">
+            <Kazanc
+              kar={(kar.data ?? []) as VarlikKar[]}
+              hareketler={(hareketler.data ?? []) as HareketKaydi[]}
+              kalemler={(kalemler.data ?? []) as VarlikPerformans[]}
+              para={para} usdtry={usdtry}
             />
           </div>
           <div className="mt-4">

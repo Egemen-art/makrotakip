@@ -67,8 +67,12 @@ export type VarlikHareket = {
   birim_fiyat: string | null
   tutar: string | null
   usdtry: string | null
+  /** Islem ucreti, kalemin kendi para biriminde; tutar komisyon dahil net nakit. */
+  komisyon: string
   kaynak: string | null
   not_: string | null
+  /** Olcum serisinde yururluge girdigi an (karar 50 istisnasi). */
+  gecerli_an: string
 }
 
 /** v_varlik_deger — pozisyon x son fiyat. */
@@ -196,3 +200,37 @@ export type VarlikOlcumPerformans = {
 
 /** varlik_hareket + varligin kodu (para akislari tablosu). */
 export type HareketKaydi = VarlikHareket & { varlik: { kod: string; sinif: VarlikSinif } | null }
+
+/** v_varlik_kar — ortalama maliyet yontemiyle kar/zarar (finans.varlik_kar()). */
+export type VarlikKar = {
+  varlik_id: number
+  kod: string
+  ad: string
+  sinif: VarlikSinif
+  para: 'TRY' | 'USD' | 'EUR'
+  kaynak_tur: KaynakTur
+  alis_adet: string
+  alis_tl: string
+  satis_adet: string
+  satis_tl: string
+  acik_adet: string
+  acik_maliyet_tl: string
+  ort_maliyet: string | null
+  gerceklesen_tl: string
+  guncel_deger_tl: string | null
+  gerceklesmemis_tl: string | null
+  toplam_kar_tl: string | null
+  acik_maliyet_dvz: string | null
+  gerceklesen_dvz: string | null
+  guncel_deger_dvz: string | null
+  gerceklesmemis_dvz: string | null
+  ilk_islem: string | null
+  son_islem: string | null
+  hareket: number
+  maliyetsiz: number
+  /** BES, nakit gibi tutarsiz girilen kalem: maliyet yok, gerceklesmemis kar hesaplanamaz. */
+  maliyet_bilinmiyor: boolean
+  /** Doviz kalemlerinde alis/satis toplami kalemin kendi parasinda (komisyon dahil net). */
+  alis_dvz: string | null
+  satis_dvz: string | null
+}
