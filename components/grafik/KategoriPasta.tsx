@@ -8,7 +8,7 @@ import type { AylikKategori, GunSatiri, KategoriSerisi, Yon } from '@/lib/tipler
 import { gunlukKirilim } from '@/app/eylemler'
 import { donemEtiket, tarihKisa, tl, tlKurus, trSirala, yuzde } from '@/lib/bicim'
 import {
-  EKSEN_STILI, Ipucu, NOTR_RENK, SERI_RENKLERI, SecimGrubu, eksenTL, yuvaAta, type YuvaKaydi,
+  EKSEN_STILI, Ipucu, NOTR_RENK, OrtalamaDugmesi, SERI_RENKLERI, SecimGrubu, eksenTL, yuvaAta, type YuvaKaydi,
 } from './ortak'
 
 
@@ -27,17 +27,19 @@ const SEYIR_AY = 12
 type Dilim = { ad: string; toplam: number }
 
 /** Secili ayda biten N aylik pencerede kategori toplamlari; 5 + Diger'e katlanir. */
-function dilimleriHesapla(kayitlar: KategoriSerisi[], yon: Yon, seciliAy: string, aralik: PastaAralik) {
+function dilimleriHesapla(kayitlar: KategoriSerisi[], yon: Yon, seciliAy: string, aralik: PastaAralik, ortalama = false) {
   const adet = Number(aralik)
   const aylar = [...new Set(kayitlar.filter((k) => k.yon === yon && k.donem <= seciliAy).map((k) => k.donem))]
     .sort()
     .slice(-adet)
   const pencere = new Set(aylar)
+  // Ortalama: pencere toplami ay sayisina bolunur — "ortalama bir ay".
+  const bolen = ortalama ? Math.max(1, aylar.length) : 1
 
   const t = new Map<string, number>()
   for (const k of kayitlar) {
     if (k.yon !== yon || !pencere.has(k.donem)) continue
-    t.set(k.kategori, (t.get(k.kategori) ?? 0) + Number(k.toplam))
+    t.set(k.kategori, (t.get(k.kategori) ?? 0) + Number(k.toplam) / bolen)
   }
   const sirali = [...t.entries()]
     .filter(([, v]) => v > 0)
@@ -317,7 +319,7 @@ function GunDetayi({
  */
 export function KategoriDetayi({
   kayitlar, altKategoriler, yon, seciliAy, aylar, pencereEtiketi,
-  secili, digerAdi, katlananlar, dilimler, toplam, renk, sec, kapat,
+  secili, digerAdi, katlananlar, dilimler, toplam, renk, sec, kapat, bolen = 1,
 }: {
   kayitlar: KategoriSerisi[]
   altKategoriler: AylikKategori[]
@@ -336,6 +338,8 @@ export function KategoriDetayi({
   renk: (ad: string) => string
   sec: (ad: string) => void
   kapat: () => void
+  /** Ortalama gorunumde pencere ay sayisi: alt kategori toplamlari buna bolunur. */
+  bolen?: number
 }) {
   // Seyir grafiginde tiklanan ay. Dilim ya da pencere degisince kapanir.
   const [seyirAy, setSeyirAy] = useState<string | null>(null)
@@ -365,7 +369,7 @@ export function KategoriDetayi({
   const kirilim = useMemo(() => {
     if (secili === digerAdi) {
       return {
-        baslik: `${digerAdi} · katlanan kategoriler`,
+        baslik: `${digerAdi} · katlanan kategoriler${bolen > 1 ? ' · aylık ortalama' : ''}`,
         satirlar: katlananlar.map((d) => ({ ...d, ham: d.ad })),
         payda: toplam,
         seyirAdlari: katlananlar.map((d) => d.ad),
@@ -373,7 +377,7 @@ export function KategoriDetayi({
         dilimDisi: false,
       }
     }
-    const satirlar = altKirilim(altKategoriler, yon, secili, aylar)
+    const satirlar = altKirilim(altKategoriler, yon, secili, aylar).map((r) => ({ ...r, toplam: r.toplam / bolen }))
     // Diger'in icinden secilen kategori dilim listesinde yok: toplami pencereden hesaplanir.
     const dilim = dilimler.find((d) => d.ad === secili)
     const pencere = new Set(aylar)
@@ -381,16 +385,16 @@ export function KategoriDetayi({
       ? dilim.toplam
       : kayitlar
           .filter((k) => k.yon === yon && k.kategori === secili && pencere.has(k.donem))
-          .reduce((t, k) => t + Number(k.toplam), 0)
+          .reduce((t, k) => t + Number(k.toplam), 0) / bolen
     return {
-      baslik: `${secili} · alt kategoriler`,
+      baslik: `${secili} · alt kategoriler${bolen > 1 ? ' · aylık ortalama' : ''}`,
       satirlar,
       payda: kategoriToplami,
       seyirAdlari: [secili],
       kategoriSatiri: false,
       dilimDisi: !dilim,
     }
-  }, [secili, digerAdi, katlananlar, toplam, altKategoriler, yon, aylar, dilimler, kayitlar])
+  }, [secili, digerAdi, katlananlar, toplam, altKategoriler, yon, aylar, dilimler, kayitlar, bolen])
   // Seyir pasta penceresinden bagimsizdir: her zaman secili ayda biten 12 ay.
   const seyir = useMemo(
     () => aylikSeyir(kayitlar, yon, kirilim.seyirAdlari, seciliAy),
@@ -522,16 +526,22 @@ export default function PastaGorunumu({
   altKategoriler: AylikKategori[]
 }) {
   const [aralik, setAralik] = useState<PastaAralik>('1')
+  const [ortalama, setOrtalama] = useState(false)
   // Tiklanan dilim: kirilim paneli acilir. Pencere degisince kapanir.
   const [secili, setSecili] = useState<string | null>(null)
-  function aralikDegistir(a: PastaAralik) { setAralik(a); setSecili(null) }
+  function aralikDegistir(a: PastaAralik) { setAralik(a); setSecili(null); if (a === '1') setOrtalama(false) }
+  // Tek ayin ortalamasi kendisidir: Aylik'tayken ortalama acilirsa pencere 1 yila genisler.
+  function ortalamaDegistir() {
+    setOrtalama((o) => { if (!o && aralik === '1') setAralik('12'); return !o })
+    setSecili(null)
+  }
   function sec(ad: string | undefined) {
     if (!ad) return
     setSecili((s) => (s === ad ? null : ad))
   }
   const hesap = useMemo(
-    () => dilimleriHesapla(kayitlar, yon, seciliAy, aralik),
-    [kayitlar, yon, seciliAy, aralik],
+    () => dilimleriHesapla(kayitlar, yon, seciliAy, aralik, ortalama),
+    [kayitlar, yon, seciliAy, aralik, ortalama],
   )
   // Diger'in icinden secilen kategori pastada dilim degildir ama kendi rengini
   // alir: kimlik rengi listede de ayni kalsin.
@@ -552,12 +562,15 @@ export default function PastaGorunumu({
   const pencereEtiketi =
     !ilk ? '—'
     : ilk === son ? donemEtiket(ilk)
-    : `${donemEtiket(ilk)} – ${donemEtiket(son!)} · ${aylar.length} ay`
+    : `${donemEtiket(ilk)} – ${donemEtiket(son!)} · ${aylar.length} ay${ortalama ? ' · aylık ortalama' : ''}`
 
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <SecimGrubu secenekler={PASTA_ARALIKLARI} deger={aralik} degistir={aralikDegistir} etiket="Pencere" />
+        <span className="flex flex-wrap items-center gap-2">
+          <SecimGrubu secenekler={PASTA_ARALIKLARI} deger={aralik} degistir={aralikDegistir} etiket="Pencere" />
+          <OrtalamaDugmesi acik={ortalama} degistir={ortalamaDegistir} />
+        </span>
         <span className="text-[12px]" style={{ color: 'var(--ink-muted)' }}>{pencereEtiketi}</span>
       </div>
 
@@ -600,7 +613,7 @@ export default function PastaGorunumu({
             </ResponsiveContainer>
             {/* Ortadaki toplam — sayi grafigin kendisi, etrafi ona hizmet eder. */}
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>toplam {yon.toLocaleLowerCase('tr')}</span>
+              <span className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>{ortalama ? 'aylık ort.' : 'toplam'} {yon.toLocaleLowerCase('tr')}</span>
               <span className="rakam text-[17px] font-semibold leading-tight">{tl(toplam)}</span>
             </div>
           </div>
@@ -646,11 +659,11 @@ export default function PastaGorunumu({
           o ayin kirilimi, kaleme tiklayinca gunler. Akis gorunumu de ayni paneli kullanir. */}
       {secili && (
         <KategoriDetayi
-          key={`${secili}|${aralik}|${seciliAy}`}
+          key={`${secili}|${aralik}|${seciliAy}|${ortalama}`}
           kayitlar={kayitlar} altKategoriler={altKategoriler} yon={yon} seciliAy={seciliAy}
           aylar={aylar} pencereEtiketi={pencereEtiketi}
           secili={secili} digerAdi={DIGER} katlananlar={katlananlar} dilimler={dilimler} toplam={toplam}
-          renk={renk} sec={sec} kapat={() => setSecili(null)}
+          renk={renk} sec={sec} kapat={() => setSecili(null)} bolen={ortalama ? Math.max(1, aylar.length) : 1}
         />
       )}
     </div>

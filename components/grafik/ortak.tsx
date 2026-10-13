@@ -139,3 +139,27 @@ export type YuvaKaydi = {
   /** Gorunur kategorilere yuva garanti eder; ortak olanlar rengini korur. */
   garanti: (adlar: string[]) => void
 }
+
+/**
+ * "Ortalama" anahtari — pencere seciciyle yan yana durur. Acikken pencerenin
+ * toplami yerine AYLIK ORTALAMASI gosterilir (6 aylik + ortalama = son 6 ayin
+ * ortalama bir ayi). Secim grubuyla ayni gorunum, tek dugme.
+ */
+export function OrtalamaDugmesi({ acik, degistir }: { acik: boolean; degistir: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={degistir}
+      aria-pressed={acik}
+      title="Seçili pencerenin aylık ortalaması"
+      className="rounded-lg px-2.5 py-1 text-[12px] font-medium"
+      style={{
+        border: '1px solid var(--hair)',
+        background: acik ? 'var(--seri-1)' : 'transparent',
+        color: acik ? '#fff' : 'var(--ink-2)',
+      }}
+    >
+      Ortalama
+    </button>
+  )
+}
