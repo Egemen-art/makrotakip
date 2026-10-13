@@ -6,6 +6,7 @@ import {
 } from 'recharts'
 import type { AylikKategori, KategoriSerisi, Yon } from '@/lib/tipler'
 import PastaGorunumu from './KategoriPasta'
+import KategoriAkis from './KategoriAkis'
 import { useAyOdagi } from './AyOdagi'
 import { donemEtiket, tl, trSirala } from '@/lib/bicim'
 import {
@@ -13,7 +14,7 @@ import {
 } from './ortak'
 
 type Bucket = 'hafta' | 'ay' | 'yil'
-type Gorunum = 'cubuk' | 'pasta'
+type Gorunum = 'cubuk' | 'pasta' | 'akis'
 type Seriler = Record<Bucket, KategoriSerisi[]>
 
 const BUCKET_ADI: Record<Bucket, string> = { hafta: 'Haftalık', ay: 'Aylık', yil: 'Yıllık' }
@@ -38,6 +39,8 @@ export default function KategoriGrafigi({
     garanti: (adlar) => setYuvalar((onceki) => yuvaAta(onceki, adlar)),
   }
   function yonDegistir(y: Yon) { setYon(y); setYuvalar({}) }
+  // Akis gider kategorilerini renklendirir: renk kaydi gider evreninde olmali.
+  function gorunumDegistir(g: Gorunum) { if (g === 'akis' && yon !== 'Gider') yonDegistir('Gider'); setGorunum(g) }
   // Ustteki aylik grafikten gelen ay: uzerine gelinen > sabitlenen > panonun secili ayi.
   const { odak, sabit, birak } = useAyOdagi()
   const pastaAyi = odak ?? sabit ?? seciliAy
@@ -46,47 +49,52 @@ export default function KategoriGrafigi({
   const [oncekiSabit, setOncekiSabit] = useState(sabit)
   if (sabit !== oncekiSabit) {
     setOncekiSabit(sabit)
-    if (sabit) setGorunum('pasta')
+    if (sabit && gorunum === 'cubuk') setGorunum('pasta')
   }
 
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <SecimGrubu<Gorunum>
-          secenekler={[{ deger: 'cubuk', ad: 'Çubuk' }, { deger: 'pasta', ad: 'Pasta' }]}
+          secenekler={[{ deger: 'cubuk', ad: 'Çubuk' }, { deger: 'pasta', ad: 'Pasta' }, { deger: 'akis', ad: 'Akış' }]}
           deger={gorunum}
-          degistir={setGorunum}
+          degistir={gorunumDegistir}
           etiket="Görünüm"
         />
-        <SecimGrubu<Yon>
-          secenekler={[{ deger: 'Gider', ad: 'Gider' }, { deger: 'Gelir', ad: 'Gelir' }]}
-          deger={yon}
-          degistir={yonDegistir}
-          etiket="Yön"
-        />
+        {/* Akis gelir ve gideri birlikte gosterir; yon secimi orada anlamsiz. */}
+        {gorunum !== 'akis' && (
+          <SecimGrubu<Yon>
+            secenekler={[{ deger: 'Gider', ad: 'Gider' }, { deger: 'Gelir', ad: 'Gelir' }]}
+            deger={yon}
+            degistir={yonDegistir}
+            etiket="Yön"
+          />
+        )}
       </div>
 
       {/* key={yon}: yon degisince secim sifirdan kurulur. */}
-      {gorunum === 'cubuk'
-        ? <CubukGorunumu key={yon} seriler={seriler} yon={yon} kayit={kayit} />
-        : (
-          <>
-            {pastaAyi !== seciliAy && (
-              <p className="mb-2 flex flex-wrap items-center gap-2 text-[12px]" style={{ color: 'var(--ink-2)' }}>
-                <span>
-                  Pasta <span className="font-semibold">{donemEtiket(pastaAyi)}</span> ile biten pencereyi gösteriyor
-                  {odak ? ' (üstteki grafikte üzerine gelinen ay)' : ' (üstteki grafikte sabitlenen ay)'}.
-                </span>
-                {!odak && sabit && (
-                  <button type="button" onClick={birak} className="rounded px-1.5 py-0.5 text-[11px] font-medium" style={{ border: '1px solid var(--hair)', color: 'var(--ink-2)' }}>
-                    {donemEtiket(seciliAy)}&apos;a dön
-                  </button>
-                )}
-              </p>
-            )}
-            <PastaGorunumu key={yon} kayitlar={seriler.ay} yon={yon} seciliAy={pastaAyi} kayit={kayit} altKategoriler={altKategoriler} />
-          </>
-        )}
+      {gorunum === 'cubuk' ? (
+        <CubukGorunumu key={yon} seriler={seriler} yon={yon} kayit={kayit} />
+      ) : (
+        <>
+          {pastaAyi !== seciliAy && (
+            <p className="mb-2 flex flex-wrap items-center gap-2 text-[12px]" style={{ color: 'var(--ink-2)' }}>
+              <span>
+                {gorunum === 'akis' ? 'Akış' : 'Pasta'} <span className="font-semibold">{donemEtiket(pastaAyi)}</span> ile biten pencereyi gösteriyor
+                {odak ? ' (üstteki grafikte üzerine gelinen ay)' : ' (üstteki grafikte sabitlenen ay)'}.
+              </span>
+              {!odak && sabit && (
+                <button type="button" onClick={birak} className="rounded px-1.5 py-0.5 text-[11px] font-medium" style={{ border: '1px solid var(--hair)', color: 'var(--ink-2)' }}>
+                  {donemEtiket(seciliAy)}&apos;a dön
+                </button>
+              )}
+            </p>
+          )}
+          {gorunum === 'akis'
+            ? <KategoriAkis kayitlar={seriler.ay} seciliAy={pastaAyi} kayit={kayit} />
+            : <PastaGorunumu key={yon} kayitlar={seriler.ay} yon={yon} seciliAy={pastaAyi} kayit={kayit} altKategoriler={altKategoriler} />}
+        </>
+      )}
     </div>
   )
 }
