@@ -81,7 +81,7 @@ export default function KategoriAkis({
 }) {
   const [aralik, setAralik] = useState<Pencere>('1')
   const [ortalama, setOrtalama] = useState(false)
-  // Ortalamanin alt secenegi: her ay tekrarlanmayan GIDERLER (duzenli.tsx) cikar; gelir aynen kalir.
+  // Ortalamanin alt secenegi: her ay tekrarlanmayan gider ve gelirler (duzenli.tsx) cikar.
   const [duzenliIstek, setDuzenli] = useState(false)
   const duzenli = duzenliIstek && ortalama
   // Tiklanan kol/kategori: altta pastadaki ayni detay paneli acilir.
@@ -159,7 +159,7 @@ export default function KategoriAkis({
   }
   const oran = h.G > 0 ? (h.H / h.G) * 100 : null
   const ilk = h.aylar[0], son = h.aylar.at(-1)
-  const pencereEtiketi = !ilk ? '—' : ilk === son ? donemEtiket(ilk) : `${donemEtiket(ilk)} – ${donemEtiket(son!)} · ${h.aylar.length} ay${ortalama ? ' · aylık ortalama' : ''}${duzenli ? ' · düzensiz giderler hariç' : ''}`
+  const pencereEtiketi = !ilk ? '—' : ilk === son ? donemEtiket(ilk) : `${donemEtiket(ilk)} – ${donemEtiket(son!)} · ${h.aylar.length} ay${ortalama ? ' · aylık ortalama' : ''}${duzenli ? ' · düzensizler hariç' : ''}`
   const sagDugum = veri.nodes.filter((d) => d.tur !== 'gelir' && d.tur !== 'acik' && d.tur !== 'butce').length
   const yukseklik = Math.max(300, sagDugum * 44 + 40)
 
@@ -172,7 +172,7 @@ export default function KategoriAkis({
           {ortalama && (
             <AnahtarDugmesi
               acik={duzenli} degistir={duzenliDegistir} ad="Düzensizleri çıkar"
-              baslik="Pencerenin ayların yarısı ya da daha azında görülen gider alt kategorileri (tek seferlik alımlar, seyahat…) ortalamaya girmez; gelir aynen kalır"
+              baslik="Pencerenin ayların yarısı ya da daha azında görülen gider alt kategorileri (tek seferlik alımlar, seyahat…) ve gelir kategorileri (prim gibi) ortalamaya girmez"
             />
           )}
         </span>
@@ -232,7 +232,7 @@ export default function KategoriAkis({
             {' '}· Aktarımlar (yatırıma giden para) gider sayılmaz, burada yok.
             {!secim && ' · Bir kola ya da kategoriye tıkla, detayı altta açılsın.'}
           </p>
-          {suzulmus && <CikanlarNotu cikanlar={suzulmus.cikanlar} ayAdedi={h.aylar.length} />}
+          {suzulmus && <CikanlarNotu cikanlar={suzulmus.cikanlar} ayAdedi={h.aylar.length} yonler={['Gelir', 'Gider']} />}
 
           {secim && detay && (
             <KategoriDetayi

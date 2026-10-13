@@ -526,9 +526,9 @@ export default function PastaGorunumu({
 }) {
   const [aralik, setAralik] = useState<Pencere>('1')
   const [ortalama, setOrtalama] = useState(false)
-  // Ortalamanin alt secenegi: her ay tekrarlanmayan giderler (duzenli.tsx) cikar. Yalniz Gider.
+  // Ortalamanin alt secenegi: her ay tekrarlanmayan kalemler (duzenli.tsx) cikar.
   const [duzenliIstek, setDuzenli] = useState(false)
-  const duzenli = duzenliIstek && ortalama && yon === 'Gider'
+  const duzenli = duzenliIstek && ortalama
   // Tiklanan dilim: kirilim paneli acilir. Pencere degisince kapanir.
   const [secili, setSecili] = useState<string | null>(null)
   function aralikDegistir(a: Pencere) {
@@ -586,10 +586,12 @@ export default function PastaGorunumu({
         <span className="flex flex-wrap items-center gap-2">
           <SecimGrubu secenekler={PENCERELER} deger={aralik} degistir={aralikDegistir} etiket="Pencere" />
           <AnahtarDugmesi acik={ortalama} degistir={ortalamaDegistir} ad="Ortalama" baslik="Seçili pencerenin aylık ortalaması" />
-          {ortalama && yon === 'Gider' && (
+          {ortalama && (
             <AnahtarDugmesi
               acik={duzenli} degistir={duzenliDegistir} ad="Düzensizleri çıkar"
-              baslik="Pencerenin ayların yarısı ya da daha azında görülen alt kategoriler (tek seferlik alımlar, seyahat…) ortalamaya girmez"
+              baslik={yon === 'Gider'
+                ? 'Pencerenin ayların yarısı ya da daha azında görülen gider alt kategorileri (tek seferlik alımlar, seyahat…) ortalamaya girmez'
+                : 'Pencerenin ayların yarısı ya da daha azında görülen gelir kategorileri (prim gibi) ortalamaya girmez'}
             />
           )}
         </span>
@@ -677,7 +679,7 @@ export default function PastaGorunumu({
         </div>
       )}
 
-      {suzulmus && <CikanlarNotu cikanlar={suzulmus.cikanlar} ayAdedi={aylar.length} />}
+      {suzulmus && <CikanlarNotu cikanlar={suzulmus.cikanlar} ayAdedi={aylar.length} yonler={[yon]} />}
 
       {/* Dilime tiklaninca: pencerede alt kategoriler, 12 aylik seyir, aya tiklayinca
           o ayin kirilimi, kaleme tiklayinca gunler. Akis gorunumu de ayni paneli kullanir. */}
