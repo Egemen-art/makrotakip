@@ -8,16 +8,12 @@ import type { AylikKategori, GunSatiri, KategoriSerisi, Yon } from '@/lib/tipler
 import { gunlukKirilim } from '@/app/eylemler'
 import { donemEtiket, tarihKisa, tl, tlKurus, trSirala, yuzde } from '@/lib/bicim'
 import {
-  EKSEN_STILI, Ipucu, NOTR_RENK, OrtalamaDugmesi, SERI_RENKLERI, SecimGrubu, eksenTL, yuvaAta, type YuvaKaydi,
+  AnahtarDugmesi, EKSEN_STILI, Ipucu, NOTR_RENK, PENCERELER, SERI_RENKLERI, SecimGrubu, eksenTL, yuvaAta,
+  type Pencere, type YuvaKaydi,
 } from './ortak'
+import { CikanlarNotu, duzensizleriCikar } from './duzenli'
 
 
-type PastaAralik = '1' | '6' | '12'
-const PASTA_ARALIKLARI: { deger: PastaAralik; ad: string }[] = [
-  { deger: '1', ad: 'Aylık' },
-  { deger: '6', ad: '6 aylık' },
-  { deger: '12', ad: '1 yıllık' },
-]
 const DIGER = 'Diğer'
 /** Pasta en fazla 6 dilim: 5 kategori + Diger. Daha fazlasi okunmaz. */
 const EN_FAZLA_DILIM = 5
@@ -27,11 +23,14 @@ const SEYIR_AY = 12
 type Dilim = { ad: string; toplam: number }
 
 /** Secili ayda biten N aylik pencerede kategori toplamlari; 5 + Diger'e katlanir. */
-function dilimleriHesapla(kayitlar: KategoriSerisi[], yon: Yon, seciliAy: string, aralik: PastaAralik, ortalama = false) {
-  const adet = Number(aralik)
-  const aylar = [...new Set(kayitlar.filter((k) => k.yon === yon && k.donem <= seciliAy).map((k) => k.donem))]
+function pencereAylari(kayitlar: KategoriSerisi[], yon: Yon, seciliAy: string, aralik: Pencere) {
+  return [...new Set(kayitlar.filter((k) => k.yon === yon && k.donem <= seciliAy).map((k) => k.donem))]
     .sort()
-    .slice(-adet)
+    .slice(-Number(aralik))
+}
+
+/** aylar: pencere (pencereAylari); duzensizler cikarilsa da pencere kaymasin diye disaridan. */
+function dilimleriHesapla(kayitlar: KategoriSerisi[], yon: Yon, aylar: string[], ortalama = false) {
   const pencere = new Set(aylar)
   // Ortalama: pencere toplami ay sayisina bolunur — "ortalama bir ay".
   const bolen = ortalama ? Math.max(1, aylar.length) : 1
@@ -525,23 +524,40 @@ export default function PastaGorunumu({
   kayit: YuvaKaydi
   altKategoriler: AylikKategori[]
 }) {
-  const [aralik, setAralik] = useState<PastaAralik>('1')
+  const [aralik, setAralik] = useState<Pencere>('1')
   const [ortalama, setOrtalama] = useState(false)
+  // Ortalamanin alt secenegi: her ay tekrarlanmayan giderler (duzenli.tsx) cikar. Yalniz Gider.
+  const [duzenliIstek, setDuzenli] = useState(false)
+  const duzenli = duzenliIstek && ortalama && yon === 'Gider'
   // Tiklanan dilim: kirilim paneli acilir. Pencere degisince kapanir.
   const [secili, setSecili] = useState<string | null>(null)
-  function aralikDegistir(a: PastaAralik) { setAralik(a); setSecili(null); if (a === '1') setOrtalama(false) }
+  function aralikDegistir(a: Pencere) {
+    setAralik(a); setSecili(null)
+    if (a === '1') { setOrtalama(false); setDuzenli(false) }
+  }
   // Tek ayin ortalamasi kendisidir: Aylik'tayken ortalama acilirsa pencere 1 yila genisler.
   function ortalamaDegistir() {
-    setOrtalama((o) => { if (!o && aralik === '1') setAralik('12'); return !o })
+    if (!ortalama && aralik === '1') setAralik('12')
+    if (ortalama) setDuzenli(false)
+    setOrtalama(!ortalama)
     setSecili(null)
   }
+  function duzenliDegistir() { setDuzenli(!duzenliIstek); setSecili(null) }
   function sec(ad: string | undefined) {
     if (!ad) return
     setSecili((s) => (s === ad ? null : ad))
   }
+  const aylarPencere = useMemo(() => pencereAylari(kayitlar, yon, seciliAy, aralik), [kayitlar, yon, seciliAy, aralik])
+  // Duzensizler cikinca pasta, detay paneli ve seyir AYNI suzulmus veriyi okur.
+  const suzulmus = useMemo(
+    () => (duzenli ? duzensizleriCikar(kayitlar, altKategoriler, aylarPencere) : null),
+    [duzenli, kayitlar, altKategoriler, aylarPencere],
+  )
+  const veriKayit = suzulmus?.kayitlar ?? kayitlar
+  const veriAlt = suzulmus?.altKategoriler ?? altKategoriler
   const hesap = useMemo(
-    () => dilimleriHesapla(kayitlar, yon, seciliAy, aralik, ortalama),
-    [kayitlar, yon, seciliAy, aralik, ortalama],
+    () => dilimleriHesapla(veriKayit, yon, aylarPencere, ortalama),
+    [veriKayit, yon, aylarPencere, ortalama],
   )
   // Diger'in icinden secilen kategori pastada dilim degildir ama kendi rengini
   // alir: kimlik rengi listede de ayni kalsin.
@@ -562,14 +578,20 @@ export default function PastaGorunumu({
   const pencereEtiketi =
     !ilk ? '—'
     : ilk === son ? donemEtiket(ilk)
-    : `${donemEtiket(ilk)} – ${donemEtiket(son!)} · ${aylar.length} ay${ortalama ? ' · aylık ortalama' : ''}`
+    : `${donemEtiket(ilk)} – ${donemEtiket(son!)} · ${aylar.length} ay${ortalama ? ' · aylık ortalama' : ''}${duzenli ? ' · düzensizler hariç' : ''}`
 
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <span className="flex flex-wrap items-center gap-2">
-          <SecimGrubu secenekler={PASTA_ARALIKLARI} deger={aralik} degistir={aralikDegistir} etiket="Pencere" />
-          <OrtalamaDugmesi acik={ortalama} degistir={ortalamaDegistir} />
+          <SecimGrubu secenekler={PENCERELER} deger={aralik} degistir={aralikDegistir} etiket="Pencere" />
+          <AnahtarDugmesi acik={ortalama} degistir={ortalamaDegistir} ad="Ortalama" baslik="Seçili pencerenin aylık ortalaması" />
+          {ortalama && yon === 'Gider' && (
+            <AnahtarDugmesi
+              acik={duzenli} degistir={duzenliDegistir} ad="Düzensizleri çıkar"
+              baslik="Pencerenin ayların yarısı ya da daha azında görülen alt kategoriler (tek seferlik alımlar, seyahat…) ortalamaya girmez"
+            />
+          )}
         </span>
         <span className="text-[12px]" style={{ color: 'var(--ink-muted)' }}>{pencereEtiketi}</span>
       </div>
@@ -655,12 +677,14 @@ export default function PastaGorunumu({
         </div>
       )}
 
+      {suzulmus && <CikanlarNotu cikanlar={suzulmus.cikanlar} ayAdedi={aylar.length} />}
+
       {/* Dilime tiklaninca: pencerede alt kategoriler, 12 aylik seyir, aya tiklayinca
           o ayin kirilimi, kaleme tiklayinca gunler. Akis gorunumu de ayni paneli kullanir. */}
       {secili && (
         <KategoriDetayi
-          key={`${secili}|${aralik}|${seciliAy}|${ortalama}`}
-          kayitlar={kayitlar} altKategoriler={altKategoriler} yon={yon} seciliAy={seciliAy}
+          key={`${secili}|${aralik}|${seciliAy}|${ortalama}|${duzenli}`}
+          kayitlar={veriKayit} altKategoriler={veriAlt} yon={yon} seciliAy={seciliAy}
           aylar={aylar} pencereEtiketi={pencereEtiketi}
           secili={secili} digerAdi={DIGER} katlananlar={katlananlar} dilimler={dilimler} toplam={toplam}
           renk={renk} sec={sec} kapat={() => setSecili(null)} bolen={ortalama ? Math.max(1, aylar.length) : 1}

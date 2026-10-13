@@ -77,7 +77,8 @@ export const EKSEN_STILI = {
 export function SecimGrubu<T extends string>({
   secenekler, deger, degistir, etiket,
 }: {
-  secenekler: { deger: T; ad: string }[]
+  /** kisa: dar ekranda (telefon) gorunen ad; yoksa ad. */
+  secenekler: { deger: T; ad: string; kisa?: string }[]
   deger: T
   degistir: (d: T) => void
   etiket: string
@@ -97,13 +98,18 @@ export function SecimGrubu<T extends string>({
             type="button"
             onClick={() => degistir(s.deger)}
             aria-pressed={acik}
-            className="rounded-md px-2.5 py-1 text-[12px] font-medium"
+            className="whitespace-nowrap rounded-md px-2.5 py-1 text-[12px] font-medium"
             style={{
               background: acik ? 'var(--seri-1)' : 'transparent',
               color: acik ? '#fff' : 'var(--ink-2)',
             }}
           >
-            {s.ad}
+            {s.kisa ? (
+              <>
+                <span className="sm:hidden">{s.kisa}</span>
+                <span className="hidden sm:inline">{s.ad}</span>
+              </>
+            ) : s.ad}
           </button>
         )
       })}
@@ -140,18 +146,29 @@ export type YuvaKaydi = {
   garanti: (adlar: string[]) => void
 }
 
+/** Pasta ve Akis penceresi: secili ayda biten N ay. */
+export type Pencere = '1' | '2' | '3' | '6' | '12'
+export const PENCERELER: { deger: Pencere; ad: string; kisa: string }[] = [
+  { deger: '1', ad: 'Aylık', kisa: '1 ay' },
+  { deger: '2', ad: '2 aylık', kisa: '2 ay' },
+  { deger: '3', ad: '3 aylık', kisa: '3 ay' },
+  { deger: '6', ad: '6 aylık', kisa: '6 ay' },
+  { deger: '12', ad: '1 yıllık', kisa: '1 yıl' },
+]
+
 /**
- * "Ortalama" anahtari — pencere seciciyle yan yana durur. Acikken pencerenin
- * toplami yerine AYLIK ORTALAMASI gosterilir (6 aylik + ortalama = son 6 ayin
- * ortalama bir ayi). Secim grubuyla ayni gorunum, tek dugme.
+ * Tek dugmelik anahtar — pencere seciciyle yan yana durur ("Ortalama",
+ * "Düzensizleri çıkar"). Secim grubuyla ayni gorunum.
  */
-export function OrtalamaDugmesi({ acik, degistir }: { acik: boolean; degistir: () => void }) {
+export function AnahtarDugmesi({
+  acik, degistir, ad, baslik,
+}: { acik: boolean; degistir: () => void; ad: string; baslik: string }) {
   return (
     <button
       type="button"
       onClick={degistir}
       aria-pressed={acik}
-      title="Seçili pencerenin aylık ortalaması"
+      title={baslik}
       className="rounded-lg px-2.5 py-1 text-[12px] font-medium"
       style={{
         border: '1px solid var(--hair)',
@@ -159,7 +176,7 @@ export function OrtalamaDugmesi({ acik, degistir }: { acik: boolean; degistir: (
         color: acik ? '#fff' : 'var(--ink-2)',
       }}
     >
-      Ortalama
+      {ad}
     </button>
   )
 }

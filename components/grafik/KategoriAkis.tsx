@@ -4,8 +4,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { ResponsiveContainer, Sankey, Tooltip } from 'recharts'
 import type { AylikKategori, KategoriSerisi, Yon } from '@/lib/tipler'
 import { donemEtiket, tl, tlKurus, trSirala } from '@/lib/bicim'
-import { NOTR_RENK, OrtalamaDugmesi, SERI_RENKLERI, SecimGrubu, yuvaAta, type YuvaKaydi } from './ortak'
+import {
+  AnahtarDugmesi, NOTR_RENK, PENCERELER, SERI_RENKLERI, SecimGrubu, yuvaAta, type Pencere, type YuvaKaydi,
+} from './ortak'
 import { KategoriDetayi } from './KategoriPasta'
+import { CikanlarNotu, duzensizleriCikar } from './duzenli'
 
 /**
  * AKIS (Sankey) — gelir nereden geldi, nereye gitti. Pasta "giderin icinde
@@ -19,12 +22,6 @@ import { KategoriDetayi } from './KategoriPasta'
  * kategori serisi yalniz Gider ve Gelir tasir.
  */
 
-type Aralik = '1' | '6' | '12'
-const ARALIKLAR: { deger: Aralik; ad: string }[] = [
-  { deger: '1', ad: 'Aylık' },
-  { deger: '6', ad: '6 aylık' },
-  { deger: '12', ad: '1 yıllık' },
-]
 const EN_FAZLA_GIDER = 7
 const EN_FAZLA_GELIR = 3
 const DIGER = 'Diğer'
@@ -36,8 +33,11 @@ const NOTR = 'var(--axis)'
 
 type Dugum = { name: string; renk: string; tur: 'gelir' | 'butce' | 'gider' | 'kalan' | 'acik' | 'diger' }
 
-function hesapla(kayitlar: KategoriSerisi[], seciliAy: string, aralik: Aralik, ortalama = false) {
-  const aylar = [...new Set(kayitlar.filter((k) => k.donem <= seciliAy).map((k) => k.donem))].sort().slice(-Number(aralik))
+const pencereAylari = (kayitlar: KategoriSerisi[], seciliAy: string, aralik: Pencere) =>
+  [...new Set(kayitlar.filter((k) => k.donem <= seciliAy).map((k) => k.donem))].sort().slice(-Number(aralik))
+
+/** aylar: pencere (pencereAylari); duzensizler cikarilsa da pencere kaymasin diye disaridan. */
+function hesapla(kayitlar: KategoriSerisi[], aylar: string[], ortalama = false) {
   const pencere = new Set(aylar)
   // Ortalama: her tutar pencere ay sayisina bolunur — "ortalama bir ay".
   const bolen = ortalama ? Math.max(1, aylar.length) : 1
@@ -79,16 +79,25 @@ export default function KategoriAkis({
   /** v_aylik_kategori — kola tiklayinca alt kategori kirilimi buradan. */
   altKategoriler: AylikKategori[]
 }) {
-  const [aralik, setAralik] = useState<Aralik>('1')
+  const [aralik, setAralik] = useState<Pencere>('1')
   const [ortalama, setOrtalama] = useState(false)
+  // Ortalamanin alt secenegi: her ay tekrarlanmayan GIDERLER (duzenli.tsx) cikar; gelir aynen kalir.
+  const [duzenliIstek, setDuzenli] = useState(false)
+  const duzenli = duzenliIstek && ortalama
   // Tiklanan kol/kategori: altta pastadaki ayni detay paneli acilir.
   const [secim, setSecim] = useState<{ ad: string; yon: Yon } | null>(null)
-  function aralikDegistir(a: Aralik) { setAralik(a); setSecim(null); if (a === '1') setOrtalama(false) }
+  function aralikDegistir(a: Pencere) {
+    setAralik(a); setSecim(null)
+    if (a === '1') { setOrtalama(false); setDuzenli(false) }
+  }
   // Tek ayin ortalamasi kendisidir: Aylik'tayken ortalama acilirsa pencere 1 yila genisler.
   function ortalamaDegistir() {
-    setOrtalama((o) => { if (!o && aralik === '1') setAralik('12'); return !o })
+    if (!ortalama && aralik === '1') setAralik('12')
+    if (ortalama) setDuzenli(false)
+    setOrtalama(!ortalama)
     setSecim(null)
   }
+  function duzenliDegistir() { setDuzenli(!duzenliIstek); setSecim(null) }
   function sec(ad: string, yon: Yon) {
     setSecim((s) => (s && s.ad === ad && s.yon === yon ? null : { ad, yon }))
   }
@@ -100,7 +109,15 @@ export default function KategoriAkis({
     window.addEventListener('resize', olc)
     return () => window.removeEventListener('resize', olc)
   }, [])
-  const h = useMemo(() => hesapla(kayitlar, seciliAy, aralik, ortalama), [kayitlar, seciliAy, aralik, ortalama])
+  const aylarPencere = useMemo(() => pencereAylari(kayitlar, seciliAy, aralik), [kayitlar, seciliAy, aralik])
+  // Duzensizler cikinca akis, detay paneli ve seyir AYNI suzulmus veriyi okur.
+  const suzulmus = useMemo(
+    () => (duzenli ? duzensizleriCikar(kayitlar, altKategoriler, aylarPencere) : null),
+    [duzenli, kayitlar, altKategoriler, aylarPencere],
+  )
+  const veriKayit = suzulmus?.kayitlar ?? kayitlar
+  const veriAlt = suzulmus?.altKategoriler ?? altKategoriler
+  const h = useMemo(() => hesapla(veriKayit, aylarPencere, ortalama), [veriKayit, aylarPencere, ortalama])
 
   // Renk kimligi pastayla ortak: gider kategorileri yuva kaydindan.
   const adlar = useMemo(() => {
@@ -142,7 +159,7 @@ export default function KategoriAkis({
   }
   const oran = h.G > 0 ? (h.H / h.G) * 100 : null
   const ilk = h.aylar[0], son = h.aylar.at(-1)
-  const pencereEtiketi = !ilk ? '—' : ilk === son ? donemEtiket(ilk) : `${donemEtiket(ilk)} – ${donemEtiket(son!)} · ${h.aylar.length} ay${ortalama ? ' · aylık ortalama' : ''}`
+  const pencereEtiketi = !ilk ? '—' : ilk === son ? donemEtiket(ilk) : `${donemEtiket(ilk)} – ${donemEtiket(son!)} · ${h.aylar.length} ay${ortalama ? ' · aylık ortalama' : ''}${duzenli ? ' · düzensiz giderler hariç' : ''}`
   const sagDugum = veri.nodes.filter((d) => d.tur !== 'gelir' && d.tur !== 'acik' && d.tur !== 'butce').length
   const yukseklik = Math.max(300, sagDugum * 44 + 40)
 
@@ -150,8 +167,14 @@ export default function KategoriAkis({
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <span className="flex flex-wrap items-center gap-2">
-          <SecimGrubu secenekler={ARALIKLAR} deger={aralik} degistir={aralikDegistir} etiket="Pencere" />
-          <OrtalamaDugmesi acik={ortalama} degistir={ortalamaDegistir} />
+          <SecimGrubu secenekler={PENCERELER} deger={aralik} degistir={aralikDegistir} etiket="Pencere" />
+          <AnahtarDugmesi acik={ortalama} degistir={ortalamaDegistir} ad="Ortalama" baslik="Seçili pencerenin aylık ortalaması" />
+          {ortalama && (
+            <AnahtarDugmesi
+              acik={duzenli} degistir={duzenliDegistir} ad="Düzensizleri çıkar"
+              baslik="Pencerenin ayların yarısı ya da daha azında görülen gider alt kategorileri (tek seferlik alımlar, seyahat…) ortalamaya girmez; gelir aynen kalır"
+            />
+          )}
         </span>
         <span className="text-[12px]" style={{ color: 'var(--ink-muted)' }}>{pencereEtiketi}</span>
       </div>
@@ -209,11 +232,12 @@ export default function KategoriAkis({
             {' '}· Aktarımlar (yatırıma giden para) gider sayılmaz, burada yok.
             {!secim && ' · Bir kola ya da kategoriye tıkla, detayı altta açılsın.'}
           </p>
+          {suzulmus && <CikanlarNotu cikanlar={suzulmus.cikanlar} ayAdedi={h.aylar.length} />}
 
           {secim && detay && (
             <KategoriDetayi
-              key={`${secim.yon}|${secim.ad}|${aralik}|${seciliAy}|${ortalama}`}
-              kayitlar={kayitlar} altKategoriler={altKategoriler} yon={secim.yon} seciliAy={seciliAy}
+              key={`${secim.yon}|${secim.ad}|${aralik}|${seciliAy}|${ortalama}|${duzenli}`}
+              kayitlar={veriKayit} altKategoriler={veriAlt} yon={secim.yon} seciliAy={seciliAy}
               aylar={h.aylar} pencereEtiketi={pencereEtiketi}
               secili={secim.ad} digerAdi={detay.digerAdi} katlananlar={detay.katlananlar} dilimler={detay.dilimler} toplam={detay.toplam}
               renk={detayRengi} sec={(ad) => sec(ad, secim.yon)} kapat={() => setSecim(null)} bolen={h.bolen}
