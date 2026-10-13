@@ -308,27 +308,37 @@ function GunDetayi({
   )
 }
 
-export default function PastaGorunumu({
-  kayitlar, yon, seciliAy, kayit, altKategoriler,
+/**
+ * KATEGORI DETAYI — secilen kategorinin (ya da "Diger"in) kirilim paneli:
+ * penceredeki alt kategoriler, secili ayda biten 12 aylik seyir, aya tiklayinca
+ * o ayin kirilimi, alt kaleme tiklayinca o ayin gunleri (sunucudan). Pasta ve
+ * Akis gorunumleri ayni paneli kullanir. Panel ici durum (ay, satir, gunler)
+ * burada; secim degisince ust bilesen `key` ile sifirlar.
+ */
+export function KategoriDetayi({
+  kayitlar, altKategoriler, yon, seciliAy, aylar, pencereEtiketi,
+  secili, digerAdi, katlananlar, dilimler, toplam, renk, sec, kapat,
 }: {
   kayitlar: KategoriSerisi[]
+  altKategoriler: AylikKategori[]
   yon: Yon
   seciliAy: string
-  kayit: YuvaKaydi
-  altKategoriler: AylikKategori[]
+  /** Pencerenin aylari ('YYYY-MM'); alt kategori toplamlari bu aylardan. */
+  aylar: string[]
+  pencereEtiketi: string
+  secili: string
+  /** Katlanan kategorileri toplayan dilimin adi ('Diğer', 'Diğer gelir'). */
+  digerAdi: string
+  katlananlar: { ad: string; toplam: number }[]
+  dilimler: { ad: string; toplam: number }[]
+  /** "Diger" seciliyken yuzde paydasi. */
+  toplam: number
+  renk: (ad: string) => string
+  sec: (ad: string) => void
+  kapat: () => void
 }) {
-  const [aralik, setAralik] = useState<PastaAralik>('1')
-  // Tiklanan dilim: alt kategori kirilimi acilir. Pencere degisince kapanir.
-  const [secili, setSecili] = useState<string | null>(null)
   // Seyir grafiginde tiklanan ay. Dilim ya da pencere degisince kapanir.
   const [seyirAy, setSeyirAy] = useState<string | null>(null)
-  function aralikDegistir(a: PastaAralik) { setAralik(a); setSecili(null); setSeyirAy(null); gunleriSifirla() }
-  function sec(ad: string | undefined) {
-    if (!ad) return
-    setSecili((s) => (s === ad ? null : ad))
-    setSeyirAy(null)
-    gunleriSifirla()
-  }
   // Ay kiriliminda tiklanan satir ve o satirin gunleri. Gun verisi sayfayla
   // gelmiyor: yalnizca tiklaninca sunucu eyleminden cekilir.
   const [satir, setSatir] = useState<string | null>(null)
@@ -341,40 +351,21 @@ export default function PastaGorunumu({
     gunleriSifirla()
   }
   useEffect(() => {
-    if (!secili) return
     // Escape icten disa kapatir: gun > ay > kirilim.
     const kacis = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       if (satir) gunleriSifirla()
       else if (seyirAy) { setSeyirAy(null); gunleriSifirla() }
-      else setSecili(null)
+      else kapat()
     }
     document.addEventListener('keydown', kacis)
     return () => document.removeEventListener('keydown', kacis)
-  }, [secili, seyirAy, satir])
-  const hesap = useMemo(
-    () => dilimleriHesapla(kayitlar, yon, seciliAy, aralik),
-    [kayitlar, yon, seciliAy, aralik],
-  )
-  // Diger'in icinden secilen kategori pastada dilim degildir ama kendi rengini
-  // alir: kimlik rengi listede de ayni kalsin.
-  const adlar = useMemo(() => {
-    const dilimAdlari = hesap.dilimler.filter((d) => d.ad !== DIGER).map((d) => d.ad)
-    return secili && secili !== DIGER && !dilimAdlari.includes(secili)
-      ? [...dilimAdlari, secili]
-      : dilimAdlari
-  }, [hesap.dilimler, secili])
-  const yuvalar = useMemo(() => yuvaAta(kayit.yuvalar, adlar), [kayit.yuvalar, adlar])
-  const { garanti } = kayit
-  useEffect(() => { garanti(adlar) }, [garanti, adlar])
-  const renk = (ad: string) => (ad === DIGER ? NOTR_RENK : SERI_RENKLERI[yuvalar[ad] ?? 0])
-
-  const { dilimler, toplam, aylar, katlanan, katlananlar } = hesap
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seyirAy, satir])
   const kirilim = useMemo(() => {
-    if (!secili) return null
-    if (secili === DIGER) {
+    if (secili === digerAdi) {
       return {
-        baslik: 'Diğer · katlanan kategoriler',
+        baslik: `${digerAdi} · katlanan kategoriler`,
         satirlar: katlananlar.map((d) => ({ ...d, ham: d.ad })),
         payda: toplam,
         seyirAdlari: katlananlar.map((d) => d.ad),
@@ -399,17 +390,17 @@ export default function PastaGorunumu({
       kategoriSatiri: false,
       dilimDisi: !dilim,
     }
-  }, [secili, katlananlar, toplam, altKategoriler, yon, aylar, dilimler, kayitlar])
+  }, [secili, digerAdi, katlananlar, toplam, altKategoriler, yon, aylar, dilimler, kayitlar])
   // Seyir pasta penceresinden bagimsizdir: her zaman secili ayda biten 12 ay.
   const seyir = useMemo(
-    () => (kirilim ? aylikSeyir(kayitlar, yon, kirilim.seyirAdlari, seciliAy) : []),
+    () => aylikSeyir(kayitlar, yon, kirilim.seyirAdlari, seciliAy),
     [kirilim, kayitlar, yon, seciliAy],
   )
   function satirSec(r: DetaySatir) {
     // Kategori satiri (Diger icindekiler): ayni senaryoyu o kategori icin kur.
-    if (kirilim?.kategoriSatiri) { sec(r.ad); return }
+    if (kirilim.kategoriSatiri) { sec(r.ad); return }
     if (satir === r.ad) { gunleriSifirla(); return }
-    if (!secili || !seyirAy) return
+    if (!seyirAy) return
     setSatir(r.ad)
     setGunler(null)
     setGunDurumu('yukleniyor')
@@ -424,10 +415,138 @@ export default function PastaGorunumu({
 
   // Tiklanan ayin kirilimi: normal dilimde alt kategoriler, Diger'de katlanan kategoriler.
   const ayDetayi = useMemo<DetaySatir[]>(() => {
-    if (!secili || !seyirAy) return []
-    if (secili === DIGER) return ayinKategorileri(kayitlar, yon, katlananlar.map((d) => d.ad), seyirAy)
+    if (!seyirAy) return []
+    if (secili === digerAdi) return ayinKategorileri(kayitlar, yon, katlananlar.map((d) => d.ad), seyirAy)
     return ayinAltlari(altKategoriler, yon, secili, seyirAy)
-  }, [secili, seyirAy, katlananlar, kayitlar, yon, altKategoriler])
+  }, [secili, digerAdi, seyirAy, katlananlar, kayitlar, yon, altKategoriler])
+
+  return (
+        <div className="mt-4 rounded-lg p-3" style={{ border: '1px solid var(--hair)', background: 'var(--plane)' }}>
+          <div className="mb-2 flex items-baseline justify-between gap-3">
+            <span className="text-[13px] font-semibold">
+              <span aria-hidden className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle" style={{ background: renk(secili) }} />
+              {kirilim.baslik}
+              <span className="ml-2 text-[11px] font-normal" style={{ color: 'var(--ink-muted)' }}>{pencereEtiketi}</span>
+              {kirilim.dilimDisi && (
+                <>
+                  <span className="ml-2 text-[11px] font-normal" style={{ color: 'var(--ink-muted)' }}>· Diğer içinden</span>
+                  <button
+                    type="button"
+                    onClick={() => sec(digerAdi)}
+                    className="ml-2 text-[11px] font-medium"
+                    style={{ color: 'var(--seri-1)' }}
+                  >
+                    ← Diğer&apos;e dön
+                  </button>
+                </>
+              )}
+            </span>
+            <button
+              type="button"
+              onClick={kapat}
+              className="shrink-0 text-[12px]"
+              style={{ color: 'var(--ink-muted)' }}
+              aria-label="Kırılımı kapat"
+            >
+              kapat ✕
+            </button>
+          </div>
+          {kirilim.satirlar.length === 0 ? (
+            <p className="py-4 text-center text-[12px]" style={{ color: 'var(--ink-muted)' }}>Bu pencerede kırılım yok.</p>
+          ) : (
+            <ul className="max-h-[320px] overflow-y-auto">
+              {kirilim.satirlar.map((r) => {
+                const enBuyuk = kirilim.satirlar[0].toplam
+                const satirIcerigi = (
+                  <>
+                    <span className="truncate">
+                      {kirilim.kategoriSatiri && <span aria-hidden style={{ color: 'var(--ink-muted)' }}>▸ </span>}
+                      {r.ad}
+                    </span>
+                    {/* Tek renk, buyukluk: secili kategorinin rengiyle ince cubuk */}
+                    <span className="hidden h-2 overflow-hidden rounded-full sm:block" style={{ background: 'var(--grid)' }} aria-hidden>
+                      <span className="block h-full rounded-full" style={{ width: `${Math.max(2, (r.toplam / enBuyuk) * 100)}%`, background: renk(secili) }} />
+                    </span>
+                    <span className="rakam text-right font-medium">{tl(r.toplam)}</span>
+                    <span className="rakam w-12 text-right" style={{ color: 'var(--ink-muted)' }}>
+                      {kirilim.payda > 0 ? yuzde(r.toplam / kirilim.payda) : '—'}
+                    </span>
+                  </>
+                )
+                const duzen = 'grid grid-cols-[minmax(90px,1fr)_auto_auto] items-center gap-x-3 py-1 text-[12px] sm:grid-cols-[minmax(120px,1fr)_minmax(80px,2fr)_auto_auto]'
+                return (
+                  <li key={r.ad}>
+                    {/* Diger'in icindeki satirlar KATEGORI: tiklaninca ayni senaryo
+                        (12 aylik seyir > ay > gun) o kategori icin kurulur. */}
+                    {kirilim.kategoriSatiri ? (
+                      <button
+                        type="button"
+                        onClick={() => sec(r.ad)}
+                        className={`${duzen} w-full rounded-md px-1 text-left hover:bg-[var(--surface)]`}
+                      >
+                        {satirIcerigi}
+                      </button>
+                    ) : (
+                      <div className={`${duzen} px-1`}>{satirIcerigi}</div>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+
+          <AylikSeyirGrafigi
+            veri={seyir}
+            ad={secili}
+            renk={renk(secili)}
+            ay={seyirAy}
+            ayDegistir={ayDegistir}
+            satirlar={ayDetayi}
+            seciliSatir={satir}
+            satirSec={satirSec}
+            kategoriSatiri={kirilim.kategoriSatiri}
+            gunler={gunler}
+            gunDurumu={gunDurumu}
+          />
+        </div>
+  )
+}
+
+export default function PastaGorunumu({
+  kayitlar, yon, seciliAy, kayit, altKategoriler,
+}: {
+  kayitlar: KategoriSerisi[]
+  yon: Yon
+  seciliAy: string
+  kayit: YuvaKaydi
+  altKategoriler: AylikKategori[]
+}) {
+  const [aralik, setAralik] = useState<PastaAralik>('1')
+  // Tiklanan dilim: kirilim paneli acilir. Pencere degisince kapanir.
+  const [secili, setSecili] = useState<string | null>(null)
+  function aralikDegistir(a: PastaAralik) { setAralik(a); setSecili(null) }
+  function sec(ad: string | undefined) {
+    if (!ad) return
+    setSecili((s) => (s === ad ? null : ad))
+  }
+  const hesap = useMemo(
+    () => dilimleriHesapla(kayitlar, yon, seciliAy, aralik),
+    [kayitlar, yon, seciliAy, aralik],
+  )
+  // Diger'in icinden secilen kategori pastada dilim degildir ama kendi rengini
+  // alir: kimlik rengi listede de ayni kalsin.
+  const adlar = useMemo(() => {
+    const dilimAdlari = hesap.dilimler.filter((d) => d.ad !== DIGER).map((d) => d.ad)
+    return secili && secili !== DIGER && !dilimAdlari.includes(secili)
+      ? [...dilimAdlari, secili]
+      : dilimAdlari
+  }, [hesap.dilimler, secili])
+  const yuvalar = useMemo(() => yuvaAta(kayit.yuvalar, adlar), [kayit.yuvalar, adlar])
+  const { garanti } = kayit
+  useEffect(() => { garanti(adlar) }, [garanti, adlar])
+  const renk = (ad: string) => (ad === DIGER ? NOTR_RENK : SERI_RENKLERI[yuvalar[ad] ?? 0])
+
+  const { dilimler, toplam, aylar, katlanan, katlananlar } = hesap
   const ilk = aylar[0]
   const son = aylar.at(-1)
   const pencereEtiketi =
@@ -523,95 +642,16 @@ export default function PastaGorunumu({
         </div>
       )}
 
-      {kirilim && (
-        <div className="mt-4 rounded-lg p-3" style={{ border: '1px solid var(--hair)', background: 'var(--plane)' }}>
-          <div className="mb-2 flex items-baseline justify-between gap-3">
-            <span className="text-[13px] font-semibold">
-              <span aria-hidden className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle" style={{ background: renk(secili!) }} />
-              {kirilim.baslik}
-              <span className="ml-2 text-[11px] font-normal" style={{ color: 'var(--ink-muted)' }}>{pencereEtiketi}</span>
-              {kirilim.dilimDisi && (
-                <>
-                  <span className="ml-2 text-[11px] font-normal" style={{ color: 'var(--ink-muted)' }}>· Diğer içinden</span>
-                  <button
-                    type="button"
-                    onClick={() => sec(DIGER)}
-                    className="ml-2 text-[11px] font-medium"
-                    style={{ color: 'var(--seri-1)' }}
-                  >
-                    ← Diğer&apos;e dön
-                  </button>
-                </>
-              )}
-            </span>
-            <button
-              type="button"
-              onClick={() => setSecili(null)}
-              className="shrink-0 text-[12px]"
-              style={{ color: 'var(--ink-muted)' }}
-              aria-label="Kırılımı kapat"
-            >
-              kapat ✕
-            </button>
-          </div>
-          {kirilim.satirlar.length === 0 ? (
-            <p className="py-4 text-center text-[12px]" style={{ color: 'var(--ink-muted)' }}>Bu pencerede kırılım yok.</p>
-          ) : (
-            <ul className="max-h-[320px] overflow-y-auto">
-              {kirilim.satirlar.map((r) => {
-                const enBuyuk = kirilim.satirlar[0].toplam
-                const satirIcerigi = (
-                  <>
-                    <span className="truncate">
-                      {kirilim.kategoriSatiri && <span aria-hidden style={{ color: 'var(--ink-muted)' }}>▸ </span>}
-                      {r.ad}
-                    </span>
-                    {/* Tek renk, buyukluk: secili kategorinin rengiyle ince cubuk */}
-                    <span className="hidden h-2 overflow-hidden rounded-full sm:block" style={{ background: 'var(--grid)' }} aria-hidden>
-                      <span className="block h-full rounded-full" style={{ width: `${Math.max(2, (r.toplam / enBuyuk) * 100)}%`, background: renk(secili!) }} />
-                    </span>
-                    <span className="rakam text-right font-medium">{tl(r.toplam)}</span>
-                    <span className="rakam w-12 text-right" style={{ color: 'var(--ink-muted)' }}>
-                      {kirilim.payda > 0 ? yuzde(r.toplam / kirilim.payda) : '—'}
-                    </span>
-                  </>
-                )
-                const duzen = 'grid grid-cols-[minmax(90px,1fr)_auto_auto] items-center gap-x-3 py-1 text-[12px] sm:grid-cols-[minmax(120px,1fr)_minmax(80px,2fr)_auto_auto]'
-                return (
-                  <li key={r.ad}>
-                    {/* Diger'in icindeki satirlar KATEGORI: tiklaninca ayni senaryo
-                        (12 aylik seyir > ay > gun) o kategori icin kurulur. */}
-                    {kirilim.kategoriSatiri ? (
-                      <button
-                        type="button"
-                        onClick={() => sec(r.ad)}
-                        className={`${duzen} w-full rounded-md px-1 text-left hover:bg-[var(--surface)]`}
-                      >
-                        {satirIcerigi}
-                      </button>
-                    ) : (
-                      <div className={`${duzen} px-1`}>{satirIcerigi}</div>
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-
-          <AylikSeyirGrafigi
-            veri={seyir}
-            ad={secili!}
-            renk={renk(secili!)}
-            ay={seyirAy}
-            ayDegistir={ayDegistir}
-            satirlar={ayDetayi}
-            seciliSatir={satir}
-            satirSec={satirSec}
-            kategoriSatiri={kirilim.kategoriSatiri}
-            gunler={gunler}
-            gunDurumu={gunDurumu}
-          />
-        </div>
+      {/* Dilime tiklaninca: pencerede alt kategoriler, 12 aylik seyir, aya tiklayinca
+          o ayin kirilimi, kaleme tiklayinca gunler. Akis gorunumu de ayni paneli kullanir. */}
+      {secili && (
+        <KategoriDetayi
+          key={`${secili}|${aralik}|${seciliAy}`}
+          kayitlar={kayitlar} altKategoriler={altKategoriler} yon={yon} seciliAy={seciliAy}
+          aylar={aylar} pencereEtiketi={pencereEtiketi}
+          secili={secili} digerAdi={DIGER} katlananlar={katlananlar} dilimler={dilimler} toplam={toplam}
+          renk={renk} sec={sec} kapat={() => setSecili(null)}
+        />
       )}
     </div>
   )

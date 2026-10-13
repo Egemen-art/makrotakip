@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { ResponsiveContainer, Sankey, Tooltip } from 'recharts'
-import type { KategoriSerisi } from '@/lib/tipler'
+import type { AylikKategori, KategoriSerisi, Yon } from '@/lib/tipler'
 import { donemEtiket, tl, tlKurus, trSirala } from '@/lib/bicim'
 import { NOTR_RENK, SERI_RENKLERI, SecimGrubu, yuvaAta, type YuvaKaydi } from './ortak'
+import { KategoriDetayi } from './KategoriPasta'
 
 /**
  * AKIS (Sankey) — gelir nereden geldi, nereye gitti. Pasta "giderin icinde
@@ -27,6 +28,7 @@ const ARALIKLAR: { deger: Aralik; ad: string }[] = [
 const EN_FAZLA_GIDER = 7
 const EN_FAZLA_GELIR = 3
 const DIGER = 'Diğer'
+const DIGER_GELIR = 'Diğer gelir'
 const KALAN = 'Kalan'
 const ACIK = 'Açık (birikimden)'
 const BUTCE = 'Bütçe'
@@ -47,22 +49,41 @@ function hesapla(kayitlar: KategoriSerisi[], seciliAy: string, aralik: Aralik) {
   }
   const katla = (s: [string, number][], n: number, digerAdi: string) =>
     s.length > n + 1 ? [...s.slice(0, n), [digerAdi, s.slice(n).reduce((t, [, v]) => t + v, 0)] as [string, number]] : s
-  const gelir = katla(topla('Gelir'), EN_FAZLA_GELIR, 'Diğer gelir')
+  const gelirTum = topla('Gelir')
+  const gelir = katla(gelirTum, EN_FAZLA_GELIR, DIGER_GELIR)
   const giderTum = topla('Gider')
   const gider = katla(giderTum, EN_FAZLA_GIDER, DIGER)
   const G = gelir.reduce((t, [, v]) => t + v, 0)
   const H = gider.reduce((t, [, v]) => t + v, 0)
-  return { aylar, gelir, gider, G, H, katlanan: Math.max(0, giderTum.length - EN_FAZLA_GIDER) }
+  // Detay paneli icin: katlanan kategoriler ("Diger" tiklaninca listelenir).
+  const katlananGider = giderTum.length > EN_FAZLA_GIDER + 1 ? giderTum.slice(EN_FAZLA_GIDER) : []
+  const katlananGelir = gelirTum.length > EN_FAZLA_GELIR + 1 ? gelirTum.slice(EN_FAZLA_GELIR) : []
+  const nesne = (x: [string, number][]) => x.map(([ad, toplam]) => ({ ad, toplam }))
+  return {
+    aylar, gelir, gider, G, H, katlanan: katlananGider.length,
+    detay: {
+      Gider: { dilimler: nesne(gider), katlananlar: nesne(katlananGider), toplam: H, digerAdi: DIGER },
+      Gelir: { dilimler: nesne(gelir), katlananlar: nesne(katlananGelir), toplam: G, digerAdi: DIGER_GELIR },
+    },
+  }
 }
 
 export default function KategoriAkis({
-  kayitlar, seciliAy, kayit,
+  kayitlar, seciliAy, kayit, altKategoriler,
 }: {
   kayitlar: KategoriSerisi[]
   seciliAy: string
   kayit: YuvaKaydi
+  /** v_aylik_kategori — kola tiklayinca alt kategori kirilimi buradan. */
+  altKategoriler: AylikKategori[]
 }) {
   const [aralik, setAralik] = useState<Aralik>('1')
+  // Tiklanan kol/kategori: altta pastadaki ayni detay paneli acilir.
+  const [secim, setSecim] = useState<{ ad: string; yon: Yon } | null>(null)
+  function aralikDegistir(a: Aralik) { setAralik(a); setSecim(null) }
+  function sec(ad: string, yon: Yon) {
+    setSecim((s) => (s && s.ad === ad && s.yon === yon ? null : { ad, yon }))
+  }
   // Dar ekranda (telefon) etiketler kisalir, kenar boslugu daralir.
   const [dar, setDar] = useState(false)
   useEffect(() => {
@@ -74,7 +95,11 @@ export default function KategoriAkis({
   const h = useMemo(() => hesapla(kayitlar, seciliAy, aralik), [kayitlar, seciliAy, aralik])
 
   // Renk kimligi pastayla ortak: gider kategorileri yuva kaydindan.
-  const adlar = useMemo(() => h.gider.map(([ad]) => ad).filter((ad) => ad !== DIGER), [h.gider])
+  const adlar = useMemo(() => {
+    const a = h.gider.map(([ad]) => ad).filter((ad) => ad !== DIGER)
+    // "Diger"in icinden secilen kategori de kendi kimlik rengini alsin.
+    return secim && secim.yon === 'Gider' && secim.ad !== DIGER && !a.includes(secim.ad) ? [...a, secim.ad] : a
+  }, [h.gider, secim])
   const yuvalar = useMemo(() => yuvaAta(kayit.yuvalar, adlar), [kayit.yuvalar, adlar])
   const { garanti } = kayit
   useEffect(() => { garanti(adlar) }, [garanti, adlar])
@@ -101,6 +126,12 @@ export default function KategoriAkis({
     return { nodes: dugumler, links: baglar }
   }, [h, yuvalar, dar])
 
+  const secili = (d?: Partial<Dugum>) => !!secim && !!d && d.name === secim.ad && tiklanabilir(d) === secim.yon
+  const detay = secim ? h.detay[secim.yon] : null
+  const detayRengi = (ad: string) => {
+    if (!secim || secim.yon === 'Gelir') return 'var(--ink-2)'
+    return ad === DIGER ? NOTR_RENK : SERI_RENKLERI[yuvalar[ad] ?? 0]
+  }
   const oran = h.G > 0 ? (h.H / h.G) * 100 : null
   const ilk = h.aylar[0], son = h.aylar.at(-1)
   const pencereEtiketi = !ilk ? '—' : ilk === son ? donemEtiket(ilk) : `${donemEtiket(ilk)} – ${donemEtiket(son!)} · ${h.aylar.length} ay`
@@ -110,7 +141,7 @@ export default function KategoriAkis({
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <SecimGrubu secenekler={ARALIKLAR} deger={aralik} degistir={setAralik} etiket="Pencere" />
+        <SecimGrubu secenekler={ARALIKLAR} deger={aralik} degistir={aralikDegistir} etiket="Pencere" />
         <span className="text-[12px]" style={{ color: 'var(--ink-muted)' }}>{pencereEtiketi}</span>
       </div>
 
@@ -140,8 +171,22 @@ export default function KategoriAkis({
                 iterations={32}
                 sort={false}
                 margin={dar ? { top: 22, right: 150, bottom: 8, left: 4 } : { top: 22, right: 170, bottom: 8, left: 150 }}
-                node={(p) => <AkisDugumu {...p} dugum={veri.nodes[p.index]} butce={Math.max(h.G, h.H)} dar={dar} />}
-                link={(p) => <AkisBagi {...p} {...bagRengi(p.payload as unknown as { source: Partial<Dugum>; target: Partial<Dugum> })} />}
+                node={(p) => <AkisDugumu {...p} dugum={veri.nodes[p.index]} butce={Math.max(h.G, h.H)} dar={dar} soluk={!!secim && !secili(veri.nodes[p.index])} />}
+                link={(p) => {
+                  const b = p.payload as unknown as { source: Partial<Dugum>; target: Partial<Dugum> }
+                  const r = bagRengi(b)
+                  const ilgili = !secim || secili(b.source) || secili(b.target)
+                  return <AkisBagi {...p} renk={r.renk} opaklik={ilgili ? r.opaklik : r.opaklik * 0.35} />
+                }}
+                onClick={(oge) => {
+                  const pl = (oge as { payload?: Partial<Dugum> & { source?: Partial<Dugum>; target?: Partial<Dugum> } }).payload
+                  if (!pl) return
+                  // Kol tiklandiysa ucundaki kategori; dugum tiklandiysa kendisi.
+                  const d = pl.source && pl.target ? (pl.target.tur === 'butce' ? pl.source : pl.target) : pl
+                  const y = tiklanabilir(d)
+                  if (y && d.name) sec(d.name, y)
+                }}
+                style={{ cursor: 'pointer' }}
               >
                 <Tooltip content={<AkisIpucu toplam={Math.max(h.G, h.H)} gelir={h.G} />} />
               </Sankey>
@@ -151,11 +196,30 @@ export default function KategoriAkis({
             {dar ? 'Bütçeden gider kategorilerine' : 'Sol: gelir kaynakları · orta: bütçe · sağ: gider kategorileri'}
             {h.katlanan > 0 && ` · "${DIGER}" ${h.katlanan + 1} kategoriyi topluyor`}
             {' '}· Aktarımlar (yatırıma giden para) gider sayılmaz, burada yok.
+            {!secim && ' · Bir kola ya da kategoriye tıkla, detayı altta açılsın.'}
           </p>
+
+          {secim && detay && (
+            <KategoriDetayi
+              key={`${secim.yon}|${secim.ad}|${aralik}|${seciliAy}`}
+              kayitlar={kayitlar} altKategoriler={altKategoriler} yon={secim.yon} seciliAy={seciliAy}
+              aylar={h.aylar} pencereEtiketi={pencereEtiketi}
+              secili={secim.ad} digerAdi={detay.digerAdi} katlananlar={detay.katlananlar} dilimler={detay.dilimler} toplam={detay.toplam}
+              renk={detayRengi} sec={(ad) => sec(ad, secim.yon)} kapat={() => setSecim(null)}
+            />
+          )}
         </>
       )}
     </div>
   )
+}
+
+/** Detay paneli acilabilen dugumler: gider (ve Diger) -> Gider, gelir -> Gelir. Butce/Kalan/Acik acilmaz. */
+function tiklanabilir(d?: Partial<Dugum>): Yon | null {
+  if (!d) return null
+  if (d.tur === 'gider' || d.tur === 'diger') return 'Gider'
+  if (d.tur === 'gelir') return 'Gelir'
+  return null
 }
 
 /**
@@ -172,13 +236,15 @@ function bagRengi(p: { source: Partial<Dugum>; target: Partial<Dugum> }) {
 }
 
 function AkisDugumu({
-  x, y, width, height, dugum, payload, butce, dar,
+  x, y, width, height, dugum, payload, butce, dar, soluk,
 }: {
   x: number; y: number; width: number; height: number
   dugum?: Dugum
   payload: { name: string; value: number; depth: number }
   butce: number
   dar: boolean
+  /** Baska bir kategori seciliyken bu dugum geri planda kalir. */
+  soluk: boolean
 }) {
   if (!dugum) return null
   const solda = dugum.tur === 'gelir' || dugum.tur === 'acik'
@@ -189,7 +255,7 @@ function AkisDugumu({
   const yazi = dar ? 11 : 12
   return (
     <g>
-      <rect x={x} y={y} width={width} height={Math.max(height, 2)} rx={3} fill={dugum.renk} />
+      <rect x={x} y={y} width={width} height={Math.max(height, 2)} rx={3} fill={dugum.renk} fillOpacity={soluk && dugum.tur !== 'butce' ? 0.35 : 1} />
       {ortada ? (
         <text x={dar ? x : x + width / 2} y={y - 6} textAnchor={dar ? 'start' : 'middle'} fontSize={11} fill="var(--ink-muted)">bütçe</text>
       ) : solda ? (

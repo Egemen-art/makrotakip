@@ -91,7 +91,7 @@ export default function KategoriGrafigi({
             </p>
           )}
           {gorunum === 'akis'
-            ? <KategoriAkis kayitlar={seriler.ay} seciliAy={pastaAyi} kayit={kayit} />
+            ? <KategoriAkis kayitlar={seriler.ay} seciliAy={pastaAyi} kayit={kayit} altKategoriler={altKategoriler} />
             : <PastaGorunumu key={yon} kayitlar={seriler.ay} yon={yon} seciliAy={pastaAyi} kayit={kayit} altKategoriler={altKategoriler} />}
         </>
       )}
